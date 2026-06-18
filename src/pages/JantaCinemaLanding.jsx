@@ -7,7 +7,6 @@ import {
   CalendarClock,
   ChevronDown,
   CloudDownload,
-  Film,
   KeyRound,
   LayoutDashboard,
   LockKeyhole,
@@ -64,8 +63,6 @@ export default function JantaCinemaLanding() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [openFaq, setOpenFaq] = useState(0);
-  const [selectedFile, setSelectedFile] = useState("");
-  const [screeningKey, setScreeningKey] = useState("");
 
   return (
     <main className="site-shell">
@@ -184,7 +181,7 @@ export default function JantaCinemaLanding() {
                 <p>{film.meta}</p>
                 <div className="film-card__actions">
                   <button className="film-card__button" type="button" onClick={() => navigate("/login")}>Details</button>
-                  <button className="film-card__button film-card__button--accent" type="button" onClick={() => navigate("/signup")}>Get Access</button>
+                  <button className="film-card__button film-card__button--accent" type="button" onClick={() => navigate("/signup")}>Buy Now</button>
                 </div>
               </div>
             </article>
@@ -224,36 +221,29 @@ export default function JantaCinemaLanding() {
           </div>
         </div>
         <div className="screening-layout">
-          <form className="access-panel" onSubmit={(e) => { e.preventDefault(); navigate("/screen"); }}>
+          <div className="access-panel">
             <div className="access-panel__header">
               <LockKeyhole size={24} />
               <div>
                 <h3>Use screening URL and key</h3>
-                <p>Select the encrypted film from the local drive and enter the approved key.</p>
+                <p>
+                  Have a Screening Key (CV-SC-…)? Go to your film's screening page, select
+                  the downloaded encrypted film, and enter the key.
+                </p>
               </div>
             </div>
-            <label className="file-drop">
-              <input
-                type="file"
-                accept=".cinevault,.mp4,.mov,.mkv"
-                onChange={(e) => setSelectedFile(e.target.files?.[0]?.name || "")}
-              />
-              <Film size={22} />
-              <span>{selectedFile || "Choose downloaded encrypted film"}</span>
-            </label>
-            <label className="input-label">
-              Screening key
-              <input
-                value={screeningKey}
-                onChange={(e) => setScreeningKey(e.target.value)}
-                placeholder="Enter key shared by Janta Cinema"
-              />
-            </label>
-            <button className="button button--primary button--full" type="submit">
-              Start Screening
+            <button
+              className="button button--primary button--full"
+              type="button"
+              onClick={() => navigate("/login")}
+            >
+              Log in to start screening
               <Play size={17} />
             </button>
-          </form>
+            <p style={{ textAlign: "center", marginTop: "14px", color: "rgba(255,255,255,0.5)", fontSize: "0.88rem" }}>
+              Or go directly to your film's screening link shared by the filmmaker.
+            </p>
+          </div>
 
           <div className="workflow">
             {workflow.map((item) => {
