@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  getScreeningKeys, revokeScreeningKey, reactivateScreeningKey, getContracts,
+  getScreeningKeys, revokeScreeningKey, reactivateScreeningKey,
   getFilms, createFilmmakerKey, createScreeningKeyPair, addKeyToGroup,
   createPremiere, getPremieres, cancelPremiere,
 } from '../services/api';
@@ -160,7 +160,6 @@ export default function ScreeningKeys() {
 
   const [keys, setKeys] = useState([]);
   const [films, setFilms] = useState([]);
-  const [contracts, setContracts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [openHistory, setOpenHistory] = useState({});
   const [toast, setToast] = useState({ msg: '', ok: true });
@@ -169,7 +168,7 @@ export default function ScreeningKeys() {
   const toggleHistory = (id) => setOpenHistory(p => ({ ...p, [id]: !p[id] }));
 
   const [fmForm, setFmForm] = useState({ film_id: '', valid_from: '', valid_to: '', num_shows: 1 });
-  const [aggForm, setAggForm] = useState({ contract_id: '', valid_from: '', valid_to: '', num_streaming_keys: 1 });
+  const [aggForm, setAggForm] = useState({ film_id: '', valid_from: '', valid_to: '', num_streaming_keys: 1 });
 
   // Premiere state
   const [showPremiereForm, setShowPremiereForm] = useState(false);
@@ -184,11 +183,7 @@ export default function ScreeningKeys() {
   useEffect(() => {
     load();
     loadPremieres();
-    if (isFilmmaker) getFilms().then(r => setFilms(r.data)).catch(() => {});
-    else {
-      getContracts().then(r => setContracts(r.data.filter(c => c.status === 'confirmed'))).catch(() => {});
-      getFilms().then(r => setFilms(r.data)).catch(() => {});
-    }
+    getFilms().then(r => setFilms(r.data)).catch(() => {});
   }, []);
 
   const handleRevoke = async (id) => {
@@ -230,7 +225,7 @@ export default function ScreeningKeys() {
       await createScreeningKeyPair({ ...aggForm, valid_from: withTz(aggForm.valid_from), valid_to: withTz(aggForm.valid_to), max_plays: 1 });
       notify('Keys created! 🎉');
       setShowForm(false);
-      setAggForm({ contract_id: '', valid_from: '', valid_to: '', num_streaming_keys: 1 });
+      setAggForm({ film_id: '', valid_from: '', valid_to: '', num_streaming_keys: 1 });
       load();
     } catch (e) { notify(e.response?.data?.detail || 'Failed', false); }
   };
@@ -315,11 +310,14 @@ export default function ScreeningKeys() {
           ) : (
             <form onSubmit={handleAggCreate} style={s.form}>
               <div style={s.row}>
-                <Field label="Contract">
-                  <select value={aggForm.contract_id} onChange={e => { const c = contracts.find(x => x.id === e.target.value); setAggForm({ ...aggForm, contract_id: e.target.value, num_streaming_keys: c?.num_shows || 1 }); }} style={s.inp} required>
-                    <option value="">Select contract…</option>
-                    {contracts.map(c => <option key={c.id} value={c.id}>{c.film_title} @ {c.venue_name} · {c.num_shows} show{c.num_shows !== 1 ? 's' : ''}</option>)}
+                <Field label="Film">
+                  <select value={aggForm.film_id} onChange={e => setAggForm({ ...aggForm, film_id: e.target.value })} style={s.inp} required>
+                    <option value="">Select film…</option>
+                    {films.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
                   </select>
+                </Field>
+                <Field label="Number of shows" hint="One key per show">
+                  <input type="number" min="1" max="20" value={aggForm.num_streaming_keys} onChange={e => setAggForm({ ...aggForm, num_streaming_keys: parseInt(e.target.value) || 1 })} style={{ ...s.inp, width: '80px' }} />
                 </Field>
               </div>
               <div style={s.row}>
