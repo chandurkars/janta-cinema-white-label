@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { uploadFilm, getFilmmakers } from '../services/api';
+import { saveFilmMetadata, uploadFilmVideo, getFilmmakers } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
 const LANGUAGES = ['Hindi', 'English', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Bengali', 'Marathi', 'Gujarati', 'Punjabi', 'Other'];
@@ -14,9 +14,18 @@ export default function FilmUpload() {
   const isFilmmaker = user?.role === 'filmmaker';
   const isDistributor = user?.role === 'aggregator_admin';
   const [filmmakers, setFilmmakers] = useState([]);
-  const [phase, setPhase] = useState('');
+
+  // Step 1 state
+  const [step, setStep] = useState(1);          // 1 = metadata, 2 = video
+  const [savedFilm, setSavedFilm] = useState(null); // film returned after step 1
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [metaError, setMetaError] = useState('');
+
+  // Step 2 state
+  const [videoFile, setVideoFile] = useState(null);
+  const [uploadPhase, setUploadPhase] = useState(''); // 'uploading' | 'encrypting' | 'done' | 'error'
   const [uploadPct, setUploadPct] = useState(0);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [uploadError, setUploadError] = useState('');
 
   const [form, setForm] = useState({
     title: '', dur_mins: '', dur_secs: '0',
@@ -28,14 +37,11 @@ export default function FilmUpload() {
     price_1_show: '', price_2_shows: '', price_4_shows: '',
   });
 
-  const [videoFile, setVideoFile] = useState(null);
   const [posterFile, setPosterFile] = useState(null);
   const [thumbHFile, setThumbHFile] = useState(null);
   const [thumbVFile, setThumbVFile] = useState(null);
   const [thumbHPreview, setThumbHPreview] = useState(null);
   const [thumbVPreview, setThumbVPreview] = useState(null);
-
-  const videoRef = useRef();
 
   useEffect(() => {
     if (!isFilmmaker && !isDistributor) {
@@ -43,7 +49,7 @@ export default function FilmUpload() {
     }
   }, []);
 
-  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const pickThumb = (file, setFile, setPreview) => {
     if (!file) return;
@@ -53,12 +59,11 @@ export default function FilmUpload() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = async (e) => {
+  // ── Step 1: save metadata ──
+  const handleSaveMeta = async (e) => {
     e.preventDefault();
-    if (!videoFile) { setErrorMsg('Please select a video file.'); return; }
-    setErrorMsg('');
-    setPhase('uploading');
-    setUploadPct(0);
+    setSavingMeta(true);
+    setMetaError('');
 
     const fd = new FormData();
     fd.append('title', form.title);
@@ -80,238 +85,282 @@ export default function FilmUpload() {
     if (form.price_2_shows) fd.append('price_2_shows', form.price_2_shows);
     if (form.price_4_shows) fd.append('price_4_shows', form.price_4_shows);
     if (form.filmmaker_id) fd.append('filmmaker_id', form.filmmaker_id);
-    fd.append('video', videoFile);
     if (posterFile) fd.append('poster', posterFile);
     if (thumbHFile) fd.append('thumbnail_h', thumbHFile);
     if (thumbVFile) fd.append('thumbnail_v', thumbVFile);
 
     try {
-      await uploadFilm(fd, (evt) => {
-        if (evt.total) {
-          const pct = Math.round((evt.loaded * 100) / evt.total);
-          setUploadPct(pct);
-          if (pct >= 100) setPhase('encrypting');
-        }
-      });
-      setPhase('done');
-      setTimeout(() => navigate('/films'), 2000);
+      const res = await saveFilmMetadata(fd);
+      setSavedFilm(res.data);
+      setStep(2);
     } catch (err) {
       const detail = err.response?.data?.detail;
       const msg = Array.isArray(detail)
         ? detail.map(d => `${d.loc?.slice(-1)[0]}: ${d.msg}`).join(', ')
-        : typeof detail === 'string' ? detail : err.message || 'Unknown error';
-      setPhase('error');
-      setErrorMsg(msg);
+        : typeof detail === 'string' ? detail : err.message || 'Failed to save details.';
+      setMetaError(msg);
+    } finally {
+      setSavingMeta(false);
     }
   };
 
-  const uploading = ['uploading', 'encrypting'].includes(phase);
+  // ── Step 2: upload video ──
+  const handleUploadVideo = async () => {
+    if (!videoFile) return;
+    setUploadPhase('uploading');
+    setUploadPct(0);
+    setUploadError('');
 
+    const fd = new FormData();
+    fd.append('video', videoFile);
+
+    try {
+      await uploadFilmVideo(savedFilm.id, fd, (evt) => {
+        if (evt.total) {
+          const pct = Math.round((evt.loaded * 100) / evt.total);
+          setUploadPct(pct);
+          if (pct >= 100) setUploadPhase('encrypting');
+        }
+      });
+      setUploadPhase('done');
+      setTimeout(() => navigate('/films'), 2500);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : err.message || 'Upload failed.';
+      setUploadPhase('error');
+      setUploadError(msg);
+    }
+  };
+
+  const uploading = ['uploading', 'encrypting'].includes(uploadPhase);
+
+  // ── Render ──
   return (
     <div style={s.page}>
-      <div style={s.pageHeader}>
-        <div>
-          <h2 style={s.pageTitle}>
-            {isFilmmaker ? 'Upload Your Film' : isDistributor ? 'Add to Your Catalogue' : 'Upload New Film'}
-          </h2>
-          <p style={s.pageSubtitle}>
-            Your film will be AES-256 encrypted on upload. Only authorised screening key holders can access it.
-          </p>
-        </div>
+      {/* Step indicator */}
+      <div style={s.stepBar}>
+        <StepDot n={1} active={step === 1} done={step > 1} label="Film Details" />
+        <div style={{ ...s.stepLine, background: step > 1 ? '#10b981' : '#334155' }} />
+        <StepDot n={2} active={step === 2} done={uploadPhase === 'done'} label="Upload Video" />
       </div>
 
-      <form onSubmit={handleSubmit}>
-        {/* ── Section 1: Video file ── */}
-        <Section title="1. Film File" icon="🎬">
-          <DropZone
-            file={videoFile}
-            onChange={setVideoFile}
-            accept="video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm,.m3u8"
-            label="Drag & drop your film here"
-            hint="Allowed: mp4, avi, mov, wmv, flv, webm, m3u8 · Max 20 GB"
-            inputRef={videoRef}
-          />
-          {videoFile && (
-            <div style={s.fileChip}>
-              <span style={s.fileChipIcon}>🎞</span>
-              <span style={s.fileChipName}>{videoFile.name}</span>
-              <span style={s.fileChipSize}>({(videoFile.size / 1024 / 1024 / 1024).toFixed(2)} GB)</span>
-              <button type="button" style={s.fileChipRemove} onClick={() => setVideoFile(null)}>✕</button>
-            </div>
-          )}
-        </Section>
-
-        {/* ── Section 2: Core details ── */}
-        <Section title="2. Film Details" icon="📋">
-          <Row>
-            <Field label="Title *" flex={3}>
-              <input style={s.input} required value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Antarnaad" />
-            </Field>
-            <Field label="Duration *" flex={1}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input style={{ ...s.input, width: 64, textAlign: 'center' }} type="number" required min="0" max="999" placeholder="120" value={form.dur_mins} onChange={e => set('dur_mins', e.target.value)} />
-                <span style={s.unit}>min</span>
-                <input style={{ ...s.input, width: 52, textAlign: 'center' }} type="number" min="0" max="59" placeholder="0" value={form.dur_secs} onChange={e => set('dur_secs', Math.min(59, parseInt(e.target.value) || 0))} />
-                <span style={s.unit}>sec</span>
-              </div>
-            </Field>
-          </Row>
-          <Row>
-            <Field label="Language *">
-              <select style={s.input} value={form.language} onChange={e => set('language', e.target.value)}>
-                {LANGUAGES.map(l => <option key={l}>{l}</option>)}
-              </select>
-            </Field>
-            <Field label="Certificate">
-              <select style={s.input} value={form.certificate} onChange={e => set('certificate', e.target.value)}>
-                {CERTIFICATES.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </Field>
-            <Field label="Genre">
-              <select style={s.input} value={form.genre} onChange={e => set('genre', e.target.value)}>
-                {GENRES.map(g => <option key={g}>{g}</option>)}
-              </select>
-            </Field>
-            <Field label="Category">
-              <select style={s.input} value={form.category} onChange={e => set('category', e.target.value)}>
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </Field>
-          </Row>
-          <Row>
-            <Field label="Director">
-              <input style={s.input} value={form.director} onChange={e => set('director', e.target.value)} placeholder="e.g. Anurag Kashyap" />
-            </Field>
-            <Field label="Producer">
-              <input style={s.input} value={form.producer} onChange={e => set('producer', e.target.value)} placeholder="e.g. Vikramaditya Motwane" />
-            </Field>
-            <Field label="Music">
-              <input style={s.input} value={form.music} onChange={e => set('music', e.target.value)} placeholder="e.g. A.R. Rahman" />
-            </Field>
-          </Row>
-          <Row>
-            <Field label="Cast (comma-separated)" flex={2}>
-              <input style={s.input} value={form.cast_list} onChange={e => set('cast_list', e.target.value)} placeholder="e.g. Nawazuddin Siddiqui, Radhika Apte" />
-            </Field>
-            <Field label="IMDb / Internal Rating">
-              <input style={s.input} value={form.rating} onChange={e => set('rating', e.target.value)} placeholder="e.g. 8.2 / 10" />
-            </Field>
-            {!isFilmmaker && !isDistributor && filmmakers.length > 0 && (
-              <Field label="Filmmaker">
-                <select style={s.input} value={form.filmmaker_id} onChange={e => set('filmmaker_id', e.target.value)}>
-                  <option value="">— None —</option>
-                  {filmmakers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+      {/* ── STEP 1 ── */}
+      {step === 1 && (
+        <form onSubmit={handleSaveMeta}>
+          <Section title="1. Basic Info" icon="📋">
+            <Row>
+              <Field label="Title *" flex={3}>
+                <input style={s.input} required value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Antarnaad" />
+              </Field>
+              <Field label="Duration *" flex={1}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input style={{ ...s.input, width: 64, textAlign: 'center' }} type="number" required min="0" max="999" placeholder="120" value={form.dur_mins} onChange={e => set('dur_mins', e.target.value)} />
+                  <span style={s.unit}>min</span>
+                  <input style={{ ...s.input, width: 52, textAlign: 'center' }} type="number" min="0" max="59" placeholder="0" value={form.dur_secs} onChange={e => set('dur_secs', Math.min(59, parseInt(e.target.value) || 0))} />
+                  <span style={s.unit}>sec</span>
+                </div>
+              </Field>
+            </Row>
+            <Row>
+              <Field label="Language *">
+                <select style={s.input} value={form.language} onChange={e => set('language', e.target.value)}>
+                  {LANGUAGES.map(l => <option key={l}>{l}</option>)}
                 </select>
               </Field>
-            )}
-          </Row>
-          <Field label="Synopsis / Description">
-            <textarea style={{ ...s.input, minHeight: 90, resize: 'vertical' }} value={form.synopsis} onChange={e => set('synopsis', e.target.value)} placeholder="Brief description of the film…" />
-          </Field>
-
-          <div style={s.checkRow}>
-            <label style={s.checkLabel}>
-              <input type="checkbox" checked={form.foul_language} onChange={e => set('foul_language', e.target.checked)} style={s.checkbox} />
-              Contains foul / abusive language
-            </label>
-            <label style={s.checkLabel}>
-              <input type="checkbox" checked={form.smoking_drugs} onChange={e => set('smoking_drugs', e.target.checked)} style={s.checkbox} />
-              Depicts smoking, drugs or alcohol consumption
-            </label>
-          </div>
-        </Section>
-
-        {/* ── Section 3: Thumbnails & Poster ── */}
-        <Section title="3. Thumbnails & Poster" icon="🖼">
-          <p style={s.hint}>Upload two thumbnails for best coverage. Horizontal is shown on the homepage grid; Vertical is used in mobile / app views.</p>
-          <Row>
-            <Field label="Horizontal Thumbnail (1920 × 1080 recommended)" flex={2}>
-              <ThumbPicker
-                preview={thumbHPreview}
-                onChange={f => pickThumb(f, setThumbHFile, setThumbHPreview)}
-                aspect="16/9"
-                hint="JPG / PNG · max 5 MB"
-              />
+              <Field label="Certificate">
+                <select style={s.input} value={form.certificate} onChange={e => set('certificate', e.target.value)}>
+                  {CERTIFICATES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Genre">
+                <select style={s.input} value={form.genre} onChange={e => set('genre', e.target.value)}>
+                  {GENRES.map(g => <option key={g}>{g}</option>)}
+                </select>
+              </Field>
+              <Field label="Category">
+                <select style={s.input} value={form.category} onChange={e => set('category', e.target.value)}>
+                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+            </Row>
+            <Row>
+              <Field label="Director">
+                <input style={s.input} value={form.director} onChange={e => set('director', e.target.value)} placeholder="e.g. Anurag Kashyap" />
+              </Field>
+              <Field label="Producer">
+                <input style={s.input} value={form.producer} onChange={e => set('producer', e.target.value)} placeholder="e.g. Vikramaditya Motwane" />
+              </Field>
+              <Field label="Music">
+                <input style={s.input} value={form.music} onChange={e => set('music', e.target.value)} placeholder="e.g. A.R. Rahman" />
+              </Field>
+            </Row>
+            <Row>
+              <Field label="Cast (comma-separated)" flex={2}>
+                <input style={s.input} value={form.cast_list} onChange={e => set('cast_list', e.target.value)} placeholder="e.g. Nawazuddin Siddiqui, Radhika Apte" />
+              </Field>
+              <Field label="Rating">
+                <input style={s.input} value={form.rating} onChange={e => set('rating', e.target.value)} placeholder="e.g. 8.2/10" />
+              </Field>
+              {!isFilmmaker && !isDistributor && filmmakers.length > 0 && (
+                <Field label="Filmmaker">
+                  <select style={s.input} value={form.filmmaker_id} onChange={e => set('filmmaker_id', e.target.value)}>
+                    <option value="">— None —</option>
+                    {filmmakers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </Field>
+              )}
+            </Row>
+            <Field label="Synopsis / Description">
+              <textarea style={{ ...s.input, minHeight: 90, resize: 'vertical' }} value={form.synopsis} onChange={e => set('synopsis', e.target.value)} placeholder="Brief description of the film…" />
             </Field>
-            <Field label="Vertical / Portrait Thumbnail (1080 × 1620 recommended)" flex={2}>
-              <ThumbPicker
-                preview={thumbVPreview}
-                onChange={f => pickThumb(f, setThumbVFile, setThumbVPreview)}
-                aspect="2/3"
-                hint="JPG / PNG · max 5 MB"
-              />
-            </Field>
-            <Field label="Official Poster (any size)">
-              <ThumbPicker
-                preview={null}
-                label={posterFile?.name}
-                onChange={f => setPosterFile(f)}
-                aspect="2/3"
-                hint="Optional"
-              />
-            </Field>
-          </Row>
-        </Section>
-
-        {/* ── Section 4: Pricing ── */}
-        <Section title="4. Screening Pricing (₹)" icon="💰">
-          <p style={s.hint}>Set the price you charge exhibitors per screening package. Leave blank if not for sale yet.</p>
-          <Row>
-            <Field label="1 Show">
-              <div style={s.priceWrap}>
-                <span style={s.pricePrefix}>₹</span>
-                <input style={{ ...s.input, paddingLeft: 28 }} type="number" min="0" step="100" value={form.price_1_show} onChange={e => set('price_1_show', e.target.value)} placeholder="e.g. 5000" />
-              </div>
-            </Field>
-            <Field label="2 Shows">
-              <div style={s.priceWrap}>
-                <span style={s.pricePrefix}>₹</span>
-                <input style={{ ...s.input, paddingLeft: 28 }} type="number" min="0" step="100" value={form.price_2_shows} onChange={e => set('price_2_shows', e.target.value)} placeholder="e.g. 9000" />
-              </div>
-            </Field>
-            <Field label="4 Shows">
-              <div style={s.priceWrap}>
-                <span style={s.pricePrefix}>₹</span>
-                <input style={{ ...s.input, paddingLeft: 28 }} type="number" min="0" step="100" value={form.price_4_shows} onChange={e => set('price_4_shows', e.target.value)} placeholder="e.g. 16000" />
-              </div>
-            </Field>
-          </Row>
-        </Section>
-
-        {/* ── Upload progress ── */}
-        {phase && (
-          <div style={s.progressBox}>
-            <div style={s.progressLabel}>
-              {phase === 'uploading' && `⬆ Uploading… ${uploadPct}%`}
-              {phase === 'encrypting' && '🔐 Encrypting on server — almost done…'}
-              {phase === 'done' && '✅ Uploaded & encrypted! Redirecting to films list…'}
-              {phase === 'error' && `❌ ${errorMsg}`}
+            <div style={s.checkRow}>
+              <label style={s.checkLabel}>
+                <input type="checkbox" checked={form.foul_language} onChange={e => set('foul_language', e.target.checked)} style={s.checkbox} />
+                Contains foul / abusive language
+              </label>
+              <label style={s.checkLabel}>
+                <input type="checkbox" checked={form.smoking_drugs} onChange={e => set('smoking_drugs', e.target.checked)} style={s.checkbox} />
+                Depicts smoking, drugs or alcohol
+              </label>
             </div>
-            {phase !== 'error' && (
-              <div style={s.barTrack}>
-                <div style={{
-                  ...s.barFill,
-                  width: phase === 'done' ? '100%' : phase === 'encrypting' ? '100%' : `${uploadPct}%`,
-                  background: phase === 'done' ? '#10b981' : '#f59e0b',
-                  animation: phase === 'encrypting' ? 'pulse-bar 1.4s ease-in-out infinite' : 'none',
-                }} />
+          </Section>
+
+          <Section title="2. Thumbnails & Poster" icon="🖼">
+            <p style={s.hint}>Horizontal thumbnail is shown on the film catalogue grid. Vertical is used in mobile / detail views.</p>
+            <Row>
+              <Field label="Horizontal (1920 × 1080)" flex={2}>
+                <ThumbPicker preview={thumbHPreview} onChange={f => pickThumb(f, setThumbHFile, setThumbHPreview)} aspect="16/9" hint="JPG / PNG · max 5 MB" />
+              </Field>
+              <Field label="Vertical / Portrait (1080 × 1620)" flex={2}>
+                <ThumbPicker preview={thumbVPreview} onChange={f => pickThumb(f, setThumbVFile, setThumbVPreview)} aspect="2/3" hint="JPG / PNG · max 5 MB" />
+              </Field>
+              <Field label="Official Poster">
+                <ThumbPicker preview={null} label={posterFile?.name} onChange={f => setPosterFile(f)} aspect="2/3" hint="Optional" />
+              </Field>
+            </Row>
+          </Section>
+
+          <Section title="3. Screening Pricing (₹)" icon="💰">
+            <p style={s.hint}>Leave blank if not for sale yet.</p>
+            <Row>
+              {[['1 Show', 'price_1_show', '5000'], ['2 Shows', 'price_2_shows', '9000'], ['4 Shows', 'price_4_shows', '16000']].map(([label, key, ph]) => (
+                <Field key={key} label={label}>
+                  <div style={s.priceWrap}>
+                    <span style={s.pricePrefix}>₹</span>
+                    <input style={{ ...s.input, paddingLeft: 28 }} type="number" min="0" step="100" value={form[key]} onChange={e => set(key, e.target.value)} placeholder={`e.g. ${ph}`} />
+                  </div>
+                </Field>
+              ))}
+            </Row>
+          </Section>
+
+          {metaError && <div style={s.errorBox}>❌ {metaError}</div>}
+
+          <button type="submit" disabled={savingMeta} style={{ ...s.submitBtn, opacity: savingMeta ? 0.7 : 1 }}>
+            {savingMeta ? 'Saving Details…' : 'Save Details & Continue →'}
+          </button>
+        </form>
+      )}
+
+      {/* ── STEP 2 ── */}
+      {step === 2 && (
+        <div>
+          <div style={s.savedBanner}>
+            <span style={s.savedIcon}>✅</span>
+            <div>
+              <strong style={{ color: '#34d399' }}>"{savedFilm?.title}" saved!</strong>
+              <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: 2 }}>
+                Details and thumbnails are stored. Now upload the video file to complete the film.
+              </div>
+            </div>
+          </div>
+
+          <Section title="Upload Film Video" icon="🎬">
+            <p style={s.hint}>Allowed: mp4, avi, mov, wmv, flv, webm · Your film will be AES-256 encrypted on the server.</p>
+            <DropZone
+              file={videoFile}
+              onChange={setVideoFile}
+              accept="video/*,.mp4,.mov,.avi,.mkv,.wmv,.flv,.webm"
+              label="Drag & drop your film here"
+              hint="Up to 20 GB"
+            />
+            {videoFile && (
+              <div style={s.fileChip}>
+                <span style={s.fileChipIcon}>🎞</span>
+                <span style={s.fileChipName}>{videoFile.name}</span>
+                <span style={s.fileChipSize}>({(videoFile.size / 1024 / 1024 / 1024).toFixed(2)} GB)</span>
+                <button type="button" style={s.fileChipRemove} onClick={() => { setVideoFile(null); setUploadPhase(''); setUploadError(''); }}>✕</button>
               </div>
             )}
+
+            {uploadPhase && (
+              <div style={{ ...s.progressBox, marginTop: 16 }}>
+                <div style={s.progressLabel}>
+                  {uploadPhase === 'uploading' && `⬆ Uploading… ${uploadPct}%`}
+                  {uploadPhase === 'encrypting' && '🔐 Encrypting on server — almost done…'}
+                  {uploadPhase === 'done' && '✅ Upload complete! Redirecting to films list…'}
+                  {uploadPhase === 'error' && `❌ ${uploadError}`}
+                </div>
+                {uploadPhase !== 'error' && (
+                  <div style={s.barTrack}>
+                    <div style={{
+                      ...s.barFill,
+                      width: uploadPhase === 'done' ? '100%' : uploadPhase === 'encrypting' ? '100%' : `${uploadPct}%`,
+                      background: uploadPhase === 'done' ? '#10b981' : '#f59e0b',
+                      animation: uploadPhase === 'encrypting' ? 'pulse-bar 1.4s ease-in-out infinite' : 'none',
+                    }} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {uploadPhase === 'error' && (
+              <div style={s.retryHint}>
+                ↩ The film details are already saved. You can retry the video upload above, or come back later and upload from the Films list.
+              </div>
+            )}
+          </Section>
+
+          <style>{`@keyframes pulse-bar { 0%,100%{opacity:.4} 50%{opacity:1} }`}</style>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button
+              type="button"
+              disabled={!videoFile || uploading || uploadPhase === 'done'}
+              onClick={handleUploadVideo}
+              style={{ ...s.submitBtn, opacity: (!videoFile || uploading || uploadPhase === 'done') ? 0.6 : 1 }}
+            >
+              {uploading ? 'Uploading & Encrypting…' : uploadPhase === 'done' ? '✅ Done!' : 'Upload & Encrypt Film →'}
+            </button>
+            {uploadPhase !== 'done' && (
+              <button type="button" onClick={() => navigate('/films')} style={s.skipBtn}>
+                Skip for now (upload later)
+              </button>
+            )}
           </div>
-        )}
-        {errorMsg && phase !== 'error' && <div style={s.errorBox}>{errorMsg}</div>}
-
-        <style>{`@keyframes pulse-bar { 0%,100%{opacity:.4} 50%{opacity:1} }`}</style>
-
-        <button type="submit" disabled={uploading} style={{ ...s.submitBtn, opacity: uploading ? 0.7 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }}>
-          {uploading ? 'Uploading & Encrypting…' : 'Upload & Encrypt Film →'}
-        </button>
-      </form>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Sub-components ──
+
+function StepDot({ n, active, done, label }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 700, fontSize: '0.9rem',
+        background: done ? '#10b981' : active ? '#f59e0b' : '#334155',
+        color: done || active ? '#0f172a' : '#64748b',
+      }}>
+        {done ? '✓' : n}
+      </div>
+      <span style={{ fontSize: '0.7rem', color: active ? '#f59e0b' : done ? '#10b981' : '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
+    </div>
+  );
+}
 
 function Section({ title, icon, children }) {
   return (
@@ -335,10 +384,9 @@ function Field({ label, children, flex = 1 }) {
   );
 }
 
-function DropZone({ file, onChange, accept, label, hint, inputRef }) {
+function DropZone({ file, onChange, accept, label, hint }) {
   const [drag, setDrag] = useState(false);
-  const ref = inputRef || useRef();
-
+  const ref = useRef();
   return (
     <div
       style={{ ...s.dropZone, borderColor: drag ? '#f59e0b' : '#334155', background: drag ? 'rgba(245,158,11,0.04)' : '#0f172a' }}
@@ -350,7 +398,7 @@ function DropZone({ file, onChange, accept, label, hint, inputRef }) {
       <div style={s.dropIcon}>☁</div>
       <div style={s.dropLabel}>{label}</div>
       <div style={s.dropOr}>or</div>
-      <button type="button" style={s.chooseBtn} onClick={e => { e.stopPropagation(); ref.current?.click(); }}>CHOOSE FILES</button>
+      <button type="button" style={s.chooseBtn} onClick={e => { e.stopPropagation(); ref.current?.click(); }}>CHOOSE FILE</button>
       <div style={s.dropHint}>{hint}</div>
       <input ref={ref} type="file" accept={accept} style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) onChange(e.target.files[0]); }} />
     </div>
@@ -380,9 +428,11 @@ function ThumbPicker({ preview, onChange, aspect, hint, label }) {
 
 const s = {
   page: { fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" },
-  pageHeader: { marginBottom: '1.5rem' },
-  pageTitle: { color: '#f1f5f9', fontSize: '1.4rem', fontWeight: 700, margin: '0 0 6px 0' },
-  pageSubtitle: { color: '#64748b', fontSize: '0.875rem', margin: 0 },
+  stepBar: { display: 'flex', alignItems: 'center', gap: 0, marginBottom: '2rem', justifyContent: 'center', paddingTop: '0.5rem' },
+  stepLine: { flex: '0 0 80px', height: 2, margin: '0 8px', marginBottom: 20 },
+  savedBanner: { display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 12, padding: '1rem 1.25rem', marginBottom: '1.25rem' },
+  savedIcon: { fontSize: '1.6rem' },
+  retryHint: { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, padding: '0.75rem 1rem', color: '#fbbf24', fontSize: '0.82rem', marginTop: 10, lineHeight: 1.5 },
   section: { background: '#1e293b', borderRadius: 12, padding: '1.5rem', marginBottom: '1.25rem' },
   sectionTitle: { color: '#e2e8f0', fontWeight: 700, fontSize: '0.95rem', marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.6rem' },
   row: { display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' },
@@ -395,12 +445,9 @@ const s = {
   checkbox: { width: 16, height: 16, cursor: 'pointer', accentColor: '#f59e0b' },
   priceWrap: { position: 'relative' },
   pricePrefix: { position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.9rem', pointerEvents: 'none' },
-  dropZone: {
-    border: '2px dashed', borderRadius: 12, padding: '3rem 2rem', textAlign: 'center',
-    cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-  },
+  dropZone: { border: '2px dashed', borderRadius: 12, padding: '3rem 2rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 },
   dropIcon: { fontSize: '3rem', color: '#94bfff', lineHeight: 1 },
-  dropLabel: { color: '#94bfff', fontSize: '1.15rem', fontWeight: 600 },
+  dropLabel: { color: '#94bfff', fontSize: '1.1rem', fontWeight: 600 },
   dropOr: { color: '#475569', fontSize: '0.85rem' },
   chooseBtn: { padding: '0.5rem 2.5rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', letterSpacing: '0.06em' },
   dropHint: { color: '#475569', fontSize: '0.78rem' },
@@ -411,10 +458,11 @@ const s = {
   fileChipRemove: { background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', padding: '0 4px' },
   thumbBox: { width: '100%', background: '#0f172a', borderRadius: 8, border: '1px dashed #334155', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 80, overflow: 'hidden' },
   thumbPlaceholder: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '1rem' },
-  progressBox: { background: '#1e293b', borderRadius: 10, padding: '1rem', marginBottom: '1rem' },
+  progressBox: { background: '#0f172a', borderRadius: 10, padding: '1rem' },
   progressLabel: { color: '#e2e8f0', fontSize: '0.875rem', fontWeight: 500, marginBottom: 8 },
   barTrack: { height: 6, borderRadius: 99, background: '#334155', overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 99, transition: 'width 0.3s ease' },
   errorBox: { background: 'rgba(220,38,38,0.12)', border: '1px solid #dc2626', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: 8, fontSize: '0.875rem', marginBottom: '1rem' },
-  submitBtn: { padding: '0.875rem 2.5rem', borderRadius: 10, border: 'none', background: '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.01em', marginTop: 4 },
+  submitBtn: { padding: '0.875rem 2.5rem', borderRadius: 10, border: 'none', background: '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', letterSpacing: '-0.01em', marginTop: 4 },
+  skipBtn: { padding: '0.875rem 1.5rem', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: '0.875rem', cursor: 'pointer' },
 };
