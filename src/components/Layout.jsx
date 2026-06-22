@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import jantaLogo from '../assets/janta-cinema/logo.png';
 
 const navItems = {
   platform_admin: [
@@ -64,10 +65,9 @@ export default function Layout() {
       <nav style={styles.sidebar}>
         {/* Brand */}
         <div style={styles.brand}>
-          <span style={styles.brandLogo}>🎬</span>
-          <span style={styles.brandName}>CineVault</span>
+          <img src={jantaLogo} alt="Janta Cinema" style={styles.brandImg} />
         </div>
-        <div style={styles.brandBy}>by VDOJar</div>
+        <div style={styles.brandBy}>Powered by VDOJar</div>
 
         <div style={styles.divider} />
 
@@ -133,14 +133,11 @@ const styles = {
   brand: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
   },
-  brandLogo: { fontSize: '1.4rem' },
-  brandName: {
-    color: '#f59e0b',
-    fontSize: '1.35rem',
-    fontWeight: '800',
-    letterSpacing: '-0.02em',
+  brandImg: {
+    width: '140px',
+    height: 'auto',
+    objectFit: 'contain',
   },
   brandBy: {
     color: '#475569',
