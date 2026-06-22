@@ -34,7 +34,8 @@ import { getPublicFilms } from "../services/api";
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 function resolveThumb(film) {
-  const url = film.thumbnail_h_url || film.thumbnail_v_url || film.poster_url;
+  // Prioritise poster_url (square) for the card grid; fall back to thumbnails
+  const url = film.poster_url || film.thumbnail_h_url || film.thumbnail_v_url;
   if (!url) return null;
   if (url.startsWith('http')) return url;
   return `${API_BASE}/films/poster/${url.split('/').pop()}`;

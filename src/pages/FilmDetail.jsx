@@ -51,25 +51,25 @@ export default function FilmDetail() {
         <Link to="/" style={s.backLink}>← Back to catalogue</Link>
       </div>
 
-      {/* Hero — trailer auto-play if available, else thumbnail */}
+      {/* Hero — horizontal thumbnail always shown; trailer overlays it if available */}
       <div style={s.hero}>
-        {film.trailer_url ? (
+        {(thumbSrc || film.trailer_url) && (
           <div style={s.heroImgWrap}>
-            <video
-              key={film.slug}
-              src={`${API_BASE}/films/public/${film.slug}/trailer`}
-              style={{ ...s.heroImg, objectFit: 'cover' }}
-              autoPlay muted loop playsInline
-              onError={e => { e.target.style.display = 'none'; }}
-            />
+            {thumbSrc && (
+              <img src={thumbSrc} alt={film.title} style={s.heroImg} />
+            )}
+            {film.trailer_url && (
+              <video
+                key={film.slug}
+                src={`${API_BASE}/films/public/${film.slug}/trailer`}
+                style={{ ...s.heroImg, objectFit: 'cover', position: 'absolute', inset: 0 }}
+                autoPlay muted loop playsInline
+                onError={e => { e.target.style.display = 'none'; }}
+              />
+            )}
             <div style={s.heroShade} />
           </div>
-        ) : thumbSrc ? (
-          <div style={s.heroImgWrap}>
-            <img src={thumbSrc} alt={film.title} style={s.heroImg} />
-            <div style={s.heroShade} />
-          </div>
-        ) : null}
+        )}
         <div style={s.heroContent}>
           <div style={s.badges}>
             {film.certificate && <span style={s.badge}>{film.certificate}</span>}
