@@ -34,6 +34,7 @@ import { getPublicFilms } from "../services/api";
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 function resolveThumb(film) {
+  // Prioritise poster_url (square) for the card grid; fall back to thumbnails
   const url = film.poster_url || film.thumbnail_h_url || film.thumbnail_v_url;
   if (!url) return null;
   if (url.startsWith('http')) {
@@ -80,13 +81,16 @@ export default function JantaCinemaLanding() {
   const { user } = useAuth();
   const [openFaq, setOpenFaq] = useState(0);
   const [liveFilms, setLiveFilms] = useState([]);
+  const [filmsLoading, setFilmsLoading] = useState(true);
 
   useEffect(() => {
-    getPublicFilms().then(r => setLiveFilms(r.data)).catch(() => {});
+    getPublicFilms()
+      .then(r => setLiveFilms(r.data))
+      .catch(() => {})
+      .finally(() => setFilmsLoading(false));
   }, []);
 
-  // Merge: live films first, then fallback static films for any empty slots (up to 6)
-  const displayFilms = liveFilms.length > 0 ? liveFilms.slice(0, 6).map(f => ({
+  const displayFilms = filmsLoading ? null : liveFilms.length > 0 ? liveFilms.slice(0, 6).map(f => ({
     id: f.id,
     slug: f.slug,
     title: f.title,
@@ -202,25 +206,41 @@ export default function JantaCinemaLanding() {
           </a>
         </div>
         <div className="film-grid">
-          {displayFilms.map((film) => (
-            <article className="film-card" key={film.id}>
-              <div className="poster-wrap">
-                {film.image
-                  ? <img src={film.image} alt={`${film.title} poster`} onError={e => { e.target.style.display = 'none'; }} />
-                  : <div style={{ width: '100%', height: '100%', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>🎬</div>
-                }
-              </div>
-              <div className="film-card__body">
-                <span>{film.status}</span>
-                <h3>{film.title}</h3>
-                <p>{film.meta}</p>
-                <div className="film-card__actions">
-                  <button className="film-card__button" type="button" onClick={() => navigate(film.slug ? `/film/${film.slug}` : "/login")}>Details</button>
-                  <button className="film-card__button film-card__button--accent" type="button" onClick={() => navigate(film.slug ? `/film/${film.slug}` : "/signup")}>Rent</button>
-                </div>
-              </div>
-            </article>
-          ))}
+          {filmsLoading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <article className="film-card film-card--skeleton" key={i} aria-hidden="true">
+                  <div className="poster-wrap skeleton-block" />
+                  <div className="film-card__body">
+                    <div className="skeleton-line" style={{ width: '60%', height: 12, marginBottom: 8 }} />
+                    <div className="skeleton-line" style={{ width: '85%', height: 18, marginBottom: 6 }} />
+                    <div className="skeleton-line" style={{ width: '70%', height: 12, marginBottom: 16 }} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <div className="skeleton-line" style={{ width: 80, height: 34, borderRadius: 8 }} />
+                      <div className="skeleton-line" style={{ width: 80, height: 34, borderRadius: 8 }} />
+                    </div>
+                  </div>
+                </article>
+              ))
+            : displayFilms.map((film) => (
+                <article className="film-card" key={film.id}>
+                  <div className="poster-wrap">
+                    {film.image
+                      ? <img src={film.image} alt={`${film.title} poster`} onError={e => { e.target.style.display = 'none'; }} />
+                      : <div style={{ width: '100%', height: '100%', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>🎬</div>
+                    }
+                  </div>
+                  <div className="film-card__body">
+                    <span>{film.status}</span>
+                    <h3>{film.title}</h3>
+                    <p>{film.meta}</p>
+                    <div className="film-card__actions">
+                      <button className="film-card__button" type="button" onClick={() => navigate(film.slug ? `/film/${film.slug}` : "/login")}>Details</button>
+                      <button className="film-card__button film-card__button--accent" type="button" onClick={() => navigate(film.slug ? `/film/${film.slug}` : "/signup")}>Rent</button>
+                    </div>
+                  </div>
+                </article>
+              ))
+          }
         </div>
       </section>
 

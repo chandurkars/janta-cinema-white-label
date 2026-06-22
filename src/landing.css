@@ -1392,3 +1392,25 @@ p {
     padding: 18px;
   }
 }
+
+/* Skeleton loading cards */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.skeleton-block,
+.skeleton-line {
+  background: #1e293b;
+  border-radius: 6px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.film-card--skeleton {
+  pointer-events: none;
+}
+
+.film-card--skeleton .poster-wrap {
+  background: #1e293b;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
