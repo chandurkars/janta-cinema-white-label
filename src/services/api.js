@@ -82,6 +82,10 @@ export const completeVideoMultipartUpload = (filmId, data) =>
 export const abortVideoMultipartUpload = (filmId, data) =>
   api.post(`/films/${filmId}/video/multipart/abort`, data);
 export const getFilmStatus = (filmId) => api.get(`/films/${filmId}/status`);
+export const retryFilmEncryption = (filmId) =>
+  api.post(`/films/${filmId}/video/retry-encryption`);
+export const uploadFilmTrailer = (filmId, formData) =>
+  api.post(`/films/${filmId}/trailer`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 
 // Rent inquiries
 export const submitInquiry = (data) => api.post('/inquiries/', data);

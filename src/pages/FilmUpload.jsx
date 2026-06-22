@@ -4,6 +4,7 @@ import {
   saveFilmMetadata, uploadFilmVideo, getFilmmakers,
   startVideoMultipartUpload, completeVideoMultipartUpload,
   abortVideoMultipartUpload, getFilmStatus,
+  retryFilmEncryption, uploadFilmTrailer,
 } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
@@ -32,8 +33,14 @@ export default function FilmUpload() {
   const [uploadDone, setUploadDone] = useState(0);   // parts uploaded so far
   const [uploadTotal, setUploadTotal] = useState(0); // total parts
   const [uploadError, setUploadError] = useState('');
+  const [encryptionFailed, setEncryptionFailed] = useState(false);
   const pollRef = useRef(null);
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  // Trailer state (Step 2, uploaded independently)
+  const [trailerFile, setTrailerFile] = useState(null);
+  const [trailerPhase, setTrailerPhase] = useState(''); // '' | 'uploading' | 'done' | 'error'
+  const [trailerError, setTrailerError] = useState('');
 
   const [form, setForm] = useState({
     title: '', dur_mins: '', dur_secs: '0',
@@ -46,11 +53,11 @@ export default function FilmUpload() {
   });
 
   const [posterFile, setPosterFile] = useState(null);
+  const [posterPreview, setPosterPreview] = useState(null);
   const [thumbHFile, setThumbHFile] = useState(null);
   const [thumbVFile, setThumbVFile] = useState(null);
   const [thumbHPreview, setThumbHPreview] = useState(null);
   const [thumbVPreview, setThumbVPreview] = useState(null);
-  const [trailerFile, setTrailerFile] = useState(null);
 
   useEffect(() => {
     if (!isFilmmaker && !isDistributor) {
@@ -97,7 +104,6 @@ export default function FilmUpload() {
     if (posterFile) fd.append('poster', posterFile);
     if (thumbHFile) fd.append('thumbnail_h', thumbHFile);
     if (thumbVFile) fd.append('thumbnail_v', thumbVFile);
-    if (trailerFile) fd.append('trailer', trailerFile);
 
     try {
       const res = await saveFilmMetadata(fd);
@@ -111,6 +117,55 @@ export default function FilmUpload() {
       setMetaError(msg);
     } finally {
       setSavingMeta(false);
+    }
+  };
+
+  const startPolling = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const statusRes = await getFilmStatus(savedFilm.id);
+        const status = statusRes.data.status;
+        if (status === 'active') {
+          clearInterval(pollRef.current);
+          setUploadPhase('done');
+          setTimeout(() => navigate('/films'), 2500);
+        } else if (status === 'draft') {
+          clearInterval(pollRef.current);
+          setEncryptionFailed(true);
+          setUploadPhase('error');
+          setUploadError('Encryption failed on server. Your file is uploaded — click "Retry Encryption" to try again without re-uploading.');
+        }
+      } catch (_) {}
+    }, 6000);
+  };
+
+  const handleRetryEncryption = async () => {
+    setUploadError('');
+    setEncryptionFailed(false);
+    setUploadPhase('encrypting');
+    try {
+      await retryFilmEncryption(savedFilm.id);
+      startPolling();
+    } catch (err) {
+      setEncryptionFailed(true);
+      setUploadPhase('error');
+      setUploadError(err.response?.data?.detail || 'Could not start encryption retry. Try again.');
+    }
+  };
+
+  const handleUploadTrailer = async () => {
+    if (!trailerFile || !savedFilm) return;
+    setTrailerPhase('uploading');
+    setTrailerError('');
+    const fd = new FormData();
+    fd.append('trailer', trailerFile);
+    try {
+      await uploadFilmTrailer(savedFilm.id, fd);
+      setTrailerPhase('done');
+    } catch (_) {
+      setTrailerPhase('error');
+      setTrailerError('Trailer upload failed. Try again.');
     }
   };
 
@@ -166,21 +221,7 @@ export default function FilmUpload() {
 
       // 4. Poll every 6 seconds until status is 'active' or back to 'draft' (failure)
       setUploadPhase('encrypting');
-      pollRef.current = setInterval(async () => {
-        try {
-          const statusRes = await getFilmStatus(savedFilm.id);
-          const status = statusRes.data.status;
-          if (status === 'active') {
-            clearInterval(pollRef.current);
-            setUploadPhase('done');
-            setTimeout(() => navigate('/films'), 2500);
-          } else if (status === 'draft') {
-            clearInterval(pollRef.current);
-            setUploadPhase('error');
-            setUploadError('Server encryption failed. The film metadata is saved — click "Upload Again" to retry the video.');
-          }
-        } catch (_) {}
-      }, 6000);
+      startPolling();
 
     } catch (err) {
       if (uploadState) {
@@ -346,32 +387,7 @@ export default function FilmUpload() {
                 <ThumbPicker preview={thumbVPreview} onChange={f => pickThumb(f, setThumbVFile, setThumbVPreview)} aspect="2/3" hint="JPG / PNG · max 5 MB" />
               </Field>
               <Field label="Official Poster">
-                <ThumbPicker preview={null} label={posterFile?.name} onChange={f => setPosterFile(f)} aspect="2/3" hint="Optional" />
-              </Field>
-            </Row>
-            <Row>
-              <Field label="Trailer (optional)" flex={4}>
-                <div style={s.trailerPicker}>
-                  <span style={{ fontSize: '1.4rem' }}>🎞</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: trailerFile ? '#10b981' : '#94a3b8', fontSize: '0.875rem', fontWeight: 600 }}>
-                      {trailerFile ? trailerFile.name : 'No trailer selected'}
-                    </div>
-                    <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 2 }}>
-                      {trailerFile
-                        ? `${(trailerFile.size / 1024 / 1024).toFixed(1)} MB — auto-plays on the film detail page`
-                        : 'MP4 recommended · max 200 MB · auto-plays muted on the film page'}
-                    </div>
-                  </div>
-                  <label style={s.trailerBtn}>
-                    {trailerFile ? 'Change' : 'Choose Trailer'}
-                    <input type="file" accept="video/*,.mp4,.mov,.webm" style={{ display: 'none' }}
-                      onChange={e => { if (e.target.files[0]) setTrailerFile(e.target.files[0]); }} />
-                  </label>
-                  {trailerFile && (
-                    <button type="button" style={s.fileChipRemove} onClick={() => setTrailerFile(null)}>✕</button>
-                  )}
-                </div>
+                <ThumbPicker preview={posterPreview} onChange={f => pickThumb(f, setPosterFile, setPosterPreview)} aspect="2/3" hint="Optional" />
               </Field>
             </Row>
           </Section>
@@ -433,10 +449,10 @@ export default function FilmUpload() {
               <div style={{ ...s.progressBox, marginTop: 16 }}>
                 <div style={s.progressLabel}>
                   {uploadPhase === 'starting'   && '⏳ Preparing upload…'}
-                  {uploadPhase === 'uploading'  && `☁ Uploading directly to cloud… ${uploadDone} / ${uploadTotal} parts`}
-                  {uploadPhase === 'completing' && '🔗 Finalising upload on cloud…'}
-                  {uploadPhase === 'encrypting' && '🔐 Encrypting on server — this may take a few minutes for large films…'}
-                  {uploadPhase === 'done'       && '✅ Film ready! Redirecting to films list…'}
+                  {uploadPhase === 'uploading'  && uploadTotal > 0 && `☁ Uploading… ${Math.round((uploadDone / uploadTotal) * 100)}%`}
+                  {uploadPhase === 'completing' && '🔗 Finalising upload…'}
+                  {uploadPhase === 'encrypting' && '🔐 Encrypting on server…'}
+                  {uploadPhase === 'done'       && '✅ Film ready! Redirecting…'}
                   {uploadPhase === 'error'      && `❌ ${uploadError}`}
                 </div>
                 {!['error', 'done'].includes(uploadPhase) && (
@@ -452,22 +468,29 @@ export default function FilmUpload() {
                     }} />
                   </div>
                 )}
-                {uploadPhase === 'uploading' && uploadTotal > 0 && (
-                  <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 4 }}>
-                    {Math.round((uploadDone / uploadTotal) * 100)}% — file travels directly to cloud storage, bypassing the server
-                  </div>
-                )}
                 {uploadPhase === 'encrypting' && (
-                  <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 4 }}>
-                    AES-256 encryption running on server — page will auto-advance when done
+                  <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: 6, lineHeight: 1.5 }}>
+                    AES-256 encryption is running on the server. This takes a few minutes for large files.
+                    You can safely navigate away — the film will appear as <strong style={{ color: '#f59e0b' }}>Processing</strong> in
+                    the Films list until it's done.
                   </div>
                 )}
               </div>
             )}
 
+            {uploadPhase === 'encrypting' && (
+              <div style={{ marginTop: 10 }}>
+                <button type="button" onClick={() => navigate('/films')} style={s.skipBtn}>
+                  Continue to Films →
+                </button>
+              </div>
+            )}
+
             {uploadPhase === 'error' && (
               <div style={s.retryHint}>
-                ↩ The film details are already saved. You can retry the video upload above, or come back later and upload from the Films list.
+                {encryptionFailed
+                  ? '↩ The file is uploaded. Click "Retry Encryption" to re-encrypt without re-uploading the file.'
+                  : '↩ Film details are saved. Retry the upload above, or come back later from the Films list.'}
               </div>
             )}
           </Section>
@@ -477,18 +500,62 @@ export default function FilmUpload() {
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button
               type="button"
-              disabled={!videoFile || uploading || uploadPhase === 'done'}
-              onClick={handleUploadVideo}
-              style={{ ...s.submitBtn, opacity: (!videoFile || uploading || uploadPhase === 'done') ? 0.6 : 1 }}
+              disabled={(!videoFile && !encryptionFailed) || uploading || uploadPhase === 'done'}
+              onClick={encryptionFailed ? handleRetryEncryption : handleUploadVideo}
+              style={{ ...s.submitBtn, opacity: ((!videoFile && !encryptionFailed) || uploading || uploadPhase === 'done') ? 0.6 : 1 }}
             >
-              {uploading ? 'Uploading…' : uploadPhase === 'done' ? '✅ Done!' : uploadPhase === 'error' ? 'Upload Again →' : 'Upload & Encrypt Film →'}
+              {uploading ? 'Uploading…'
+                : uploadPhase === 'done' ? '✅ Done!'
+                : encryptionFailed ? 'Retry Encryption →'
+                : 'Upload & Encrypt Film →'}
             </button>
-            {uploadPhase !== 'done' && (
+            {uploadPhase !== 'done' && !uploading && (
               <button type="button" onClick={() => navigate('/films')} style={s.skipBtn}>
-                Skip for now (upload later)
+                {uploadPhase === 'encrypting' ? 'Continue to Films →' : 'Skip for now (upload later)'}
               </button>
             )}
           </div>
+
+          {/* Trailer upload — independent of video, optional */}
+          <Section title="Trailer (optional)" icon="🎞">
+            <p style={s.hint}>Auto-plays muted on the film detail page. MP4 recommended · max 200 MB · uploaded unencrypted.</p>
+            <div style={s.trailerPicker}>
+              <span style={{ fontSize: '1.4rem' }}>🎞</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: trailerFile ? '#10b981' : '#94a3b8', fontSize: '0.875rem', fontWeight: 600 }}>
+                  {trailerPhase === 'done' ? '✅ Trailer uploaded!'
+                    : trailerFile ? trailerFile.name
+                    : 'No trailer selected'}
+                </div>
+                {trailerFile && trailerPhase !== 'done' && (
+                  <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 2 }}>
+                    {(trailerFile.size / 1024 / 1024).toFixed(1)} MB
+                  </div>
+                )}
+                {trailerError && <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: 2 }}>{trailerError}</div>}
+              </div>
+              {trailerPhase !== 'done' && (
+                <label style={s.trailerBtn}>
+                  {trailerFile ? 'Change' : 'Choose Trailer'}
+                  <input type="file" accept="video/*,.mp4,.mov,.webm" style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files[0]) { setTrailerFile(e.target.files[0]); setTrailerPhase(''); setTrailerError(''); } }} />
+                </label>
+              )}
+              {trailerFile && trailerPhase !== 'done' && (
+                <button
+                  type="button"
+                  disabled={trailerPhase === 'uploading'}
+                  onClick={handleUploadTrailer}
+                  style={{ ...s.trailerBtn, background: '#10b981', color: '#0f172a', border: 'none', fontWeight: 700 }}
+                >
+                  {trailerPhase === 'uploading' ? 'Uploading…' : 'Upload Trailer'}
+                </button>
+              )}
+              {trailerFile && trailerPhase !== 'done' && trailerPhase !== 'uploading' && (
+                <button type="button" style={s.fileChipRemove} onClick={() => { setTrailerFile(null); setTrailerPhase(''); }}>✕</button>
+              )}
+            </div>
+          </Section>
         </div>
       )}
     </div>
