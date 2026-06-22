@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getPublicFilm } from '../services/api';
 import RentModal from '../components/RentModal';
@@ -24,7 +24,9 @@ export default function FilmDetail() {
   const navigate = useNavigate();
   const [film, setFilm] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rentModal, setRentModal] = useState(null); // null or number of shows
+  const [rentModal, setRentModal] = useState(null);
+  const [soundOn, setSoundOn] = useState(false);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     getPublicFilm(slug)
@@ -66,6 +68,7 @@ export default function FilmDetail() {
             )}
             {film.trailer_url && (
               <video
+                ref={videoRef}
                 key={film.slug}
                 src={`${API_BASE}/films/public/${film.slug}/trailer`}
                 style={{ ...s.heroImg, objectFit: 'cover', position: 'absolute', inset: 0 }}
@@ -74,6 +77,21 @@ export default function FilmDetail() {
               />
             )}
             <div style={s.heroShade} />
+            {film.trailer_url && (
+              <button
+                type="button"
+                style={s.soundBtn}
+                onClick={() => {
+                  if (!videoRef.current) return;
+                  const next = !soundOn;
+                  videoRef.current.muted = !next;
+                  setSoundOn(next);
+                }}
+                title={soundOn ? 'Mute trailer' : 'Unmute trailer'}
+              >
+                {soundOn ? '🔊' : '🔇'}
+              </button>
+            )}
           </div>
         )}
         <div style={s.heroContent}>
@@ -192,6 +210,7 @@ const s = {
   heroImg: { width: '100%', height: '100%', objectFit: 'cover' },
   heroShade: { position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0.75) 35%, rgba(15,23,42,0.2) 65%, rgba(0,0,0,0) 100%)' },
   heroContent: { position: 'relative', padding: '2.5rem 2.5rem 2rem', maxWidth: 800, zIndex: 1 },
+  soundBtn: { position: 'absolute', bottom: 16, right: 16, zIndex: 2, background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 99, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', cursor: 'pointer', backdropFilter: 'blur(8px)', transition: 'background 0.15s' },
   badges: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 },
   badge: { padding: '3px 11px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.12)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(4px)' },
   heroTitle: { fontSize: 'clamp(2rem, 4.5vw, 3.25rem)', fontWeight: 800, margin: '0 0 10px 0', letterSpacing: '-0.02em', textShadow: '0 2px 24px rgba(0,0,0,0.6)' },
