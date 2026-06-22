@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -30,6 +30,15 @@ import bandPoster from "../assets/janta-cinema/sabki-bajegi-band.jpg";
 import posterEightyThree from "../assets/janta-cinema/83.jpg";
 
 import { useAuth } from "../hooks/useAuth";
+import { getPublicFilms } from "../services/api";
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+function resolveThumb(film) {
+  const url = film.thumbnail_h_url || film.thumbnail_v_url || film.poster_url;
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE}/films/poster/${url.split('/').pop()}`;
+}
 
 const films = [
   { id: "vikram-vedha", slug: "vikram-vedha", title: "Vikram Vedha", meta: "Hindi | Feature | Action thriller", status: "Available for private screenings", image: vikramPoster },
@@ -63,6 +72,22 @@ export default function JantaCinemaLanding() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [openFaq, setOpenFaq] = useState(0);
+  const [liveFilms, setLiveFilms] = useState([]);
+
+  useEffect(() => {
+    getPublicFilms().then(r => setLiveFilms(r.data)).catch(() => {});
+  }, []);
+
+  // Merge: live films first, then fallback static films for any empty slots (up to 6)
+  const displayFilms = liveFilms.length > 0 ? liveFilms.slice(0, 6).map(f => ({
+    id: f.id,
+    slug: f.slug,
+    title: f.title,
+    meta: [f.language, f.category, f.genre].filter(Boolean).join(' | '),
+    status: f.price_1_show ? `From ₹${Math.min(...[f.price_1_show, f.price_2_shows, f.price_4_shows].filter(Boolean)).toLocaleString('en-IN')} / show` : 'Enquire for pricing',
+    image: resolveThumb(f),
+    liveData: f,
+  })) : films;
 
   return (
     <main className="site-shell">
@@ -170,18 +195,21 @@ export default function JantaCinemaLanding() {
           </a>
         </div>
         <div className="film-grid">
-          {films.map((film) => (
+          {displayFilms.map((film) => (
             <article className="film-card" key={film.id}>
               <div className="poster-wrap">
-                <img src={film.image} alt={`${film.title} poster`} />
+                {film.image
+                  ? <img src={film.image} alt={`${film.title} poster`} onError={e => { e.target.style.display = 'none'; }} />
+                  : <div style={{ width: '100%', height: '100%', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>🎬</div>
+                }
               </div>
               <div className="film-card__body">
                 <span>{film.status}</span>
                 <h3>{film.title}</h3>
                 <p>{film.meta}</p>
                 <div className="film-card__actions">
-                  <button className="film-card__button" type="button" onClick={() => navigate("/login")}>Details</button>
-                  <button className="film-card__button film-card__button--accent" type="button" onClick={() => navigate("/signup")}>Buy Now</button>
+                  <button className="film-card__button" type="button" onClick={() => navigate(film.slug ? `/film/${film.slug}` : "/login")}>Details</button>
+                  <button className="film-card__button film-card__button--accent" type="button" onClick={() => navigate(film.slug ? `/film/${film.slug}` : "/signup")}>Rent</button>
                 </div>
               </div>
             </article>

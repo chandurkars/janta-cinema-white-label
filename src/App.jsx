@@ -1,12 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
-import Landing from './pages/JantaCinemaLanding';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Films from './pages/Films';
 import FilmUpload from './pages/FilmUpload';
+import FilmDetail from './pages/FilmDetail';
 import Venues from './pages/Venues';
 import VenueForm from './pages/VenueForm';
 import Contracts from './pages/Contracts';
@@ -17,6 +18,7 @@ import Player from './pages/Player';
 import FilmDownloadPage from './pages/FilmDownloadPage';
 import FilmScreenPage from './pages/FilmScreenPage';
 import PremierePage from './pages/PremierePage';
+import Inquiries from './pages/Inquiries';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -41,6 +43,9 @@ function AppRoutes() {
       <Route path="/screen" element={<Player />} />
       <Route path="/screen/:keyToken" element={<Player />} />
 
+      {/* Public film detail + enquiry */}
+      <Route path="/film/:slug" element={<FilmDetail />} />
+
       {/* New two-key model pages — public, no auth */}
       <Route path="/film/:slug/download" element={<FilmDownloadPage />} />
       <Route path="/film/:slug/screen" element={<FilmScreenPage />} />
@@ -62,6 +67,7 @@ function AppRoutes() {
         <Route path="/contracts" element={<Contracts />} />
         <Route path="/contracts/new" element={<ContractForm />} />
         <Route path="/keys" element={<ScreeningKeys />} />
+        <Route path="/inquiries" element={<Inquiries />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/player" element={<Player />} />
       </Route>

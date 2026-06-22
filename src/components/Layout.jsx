@@ -6,6 +6,7 @@ const navItems = {
   platform_admin: [
     { to: '/dashboard', label: '⬜ Dashboard' },
     { to: '/films', label: '🎬 Films' },
+    { to: '/inquiries', label: '📩 Inquiries' },
     { to: '/venues', label: '🏛 Venues' },
     { to: '/contracts', label: '📋 Contracts' },
     { to: '/keys', label: '🔑 Screening Keys' },

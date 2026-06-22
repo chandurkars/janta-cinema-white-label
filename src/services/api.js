@@ -68,8 +68,14 @@ export const getScreeningHistory = () => api.get('/analytics/screenings');
 export const getUsers = () => api.get('/users/');
 export const createUser = (data) => api.post('/users/', data);
 
-// Public film info (no auth)
+// Public film catalogue (no auth)
+export const getPublicFilms = () => api.get('/films/public');
 export const getPublicFilm = (slug) => api.get(`/films/public/${slug}`);
+
+// Rent inquiries
+export const submitInquiry = (data) => api.post('/inquiries/', data);
+export const getInquiries = () => api.get('/inquiries/');
+export const updateInquiryStatus = (id, status) => api.patch(`/inquiries/${id}/status?status=${status}`);
 
 // Player-facing
 export const validateKey = (key_token) => api.post('/screening/validate', { key_token });
