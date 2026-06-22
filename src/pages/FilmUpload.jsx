@@ -187,12 +187,33 @@ export default function FilmUpload() {
           raw_key: uploadState.raw_key,
         }).catch(() => {});
       }
-      // Fall back to old direct upload if R2 not configured (dev mode)
+
+      // Decide whether to fall back to direct Railway upload:
+      //   • Backend says R2 not configured (400 + 'R2' in detail)  → always fall back
+      //   • CORS error (no response — browser blocked the R2 PUT)   → fall back if < 200 MB
+      //     (larger files will OOM Railway's in-memory encryption)
       const detail = err.response?.data?.detail || '';
-      if (err.response?.status === 400 && detail.includes('R2')) {
+      const isCorsOrNetwork = !err.response && uploadState !== null; // failed after start, no HTTP response
+      const isR2NotConfigured = err.response?.status === 400 && detail.includes('R2');
+      const smallEnoughForRailway = videoFile.size < 200 * 1024 * 1024; // 200 MB
+
+      if (isR2NotConfigured || (isCorsOrNetwork && smallEnoughForRailway)) {
+        if (isCorsOrNetwork) {
+          console.warn('R2 CORS not configured — falling back to direct Railway upload (file < 200 MB)');
+        }
         await handleDirectUpload();
         return;
       }
+
+      if (isCorsOrNetwork && !smallEnoughForRailway) {
+        setUploadPhase('error');
+        setUploadError(
+          `Cloud storage CORS is not configured. Files larger than 200 MB cannot be uploaded until ` +
+          `your R2 bucket allows cross-origin PUT requests. Please contact the platform admin.`
+        );
+        return;
+      }
+
       setUploadPhase('error');
       setUploadError(err.message || 'Upload failed. Please try again.');
     }
