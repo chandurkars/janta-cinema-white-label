@@ -170,7 +170,6 @@ export default function FilmManage() {
       setNewPoster(null);
       setNewThumbH(null);
       setNewThumbSq(null);
-      setNewThumbV(null);
       setImgMsg('Images updated.');
     } catch (err) {
       setImgError(err.response?.data?.detail || 'Image update failed.');
