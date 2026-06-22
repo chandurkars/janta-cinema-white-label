@@ -94,6 +94,12 @@ export default function Films() {
         </div>
         {films.map(f => (
           <div key={f.id} style={styles.row}>
+            <span style={{ flex: '0 0 48px' }}>
+              {f.poster_url
+                ? <img src={f.poster_url} alt="" style={{ width: 48, height: 64, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                : <div style={{ width: 48, height: 64, borderRadius: 6, background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🎬</div>
+              }
+            </span>
             <span style={styles.col}>
               <strong>{f.title}</strong>
               {f.synopsis && <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '2px' }}>{f.synopsis.slice(0, 60)}...</div>}
@@ -150,7 +156,7 @@ export default function Films() {
 const styles = {
   table: { background: '#1e293b', borderRadius: '10px', overflow: 'hidden', marginTop: '1rem' },
   header: { display: 'flex', padding: '0.6rem 1rem', background: '#334155', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase' },
-  row: { display: 'flex', padding: '0.6rem 1rem', borderBottom: '1px solid #334155', color: '#e2e8f0', alignItems: 'center' },
+  row: { display: 'flex', gap: '12px', padding: '0.75rem 1rem', borderBottom: '1px solid #334155', color: '#e2e8f0', alignItems: 'center' },
   col: { flex: 2 },
   colSm: { flex: 1 },
   badge: { padding: '0.15rem 0.5rem', borderRadius: '10px', color: 'white', fontSize: '0.7rem' },
