@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import jantaLogo from '../assets/janta-cinema/logo.png';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -32,8 +33,7 @@ export default function Login() {
       {/* Top bar */}
       <div style={s.topBar}>
         <Link to="/" style={s.brandLink}>
-          <span style={s.brandEmoji}>🎬</span>
-          <span style={s.brandText}>CineVault</span>
+          <img src={jantaLogo} alt="Janta Cinema" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
         </Link>
         <Link to="/" style={s.backLink}>← Back to home</Link>
       </div>
@@ -42,7 +42,7 @@ export default function Login() {
       <div style={s.card}>
         <div style={s.cardHeader}>
           <h1 style={s.title}>Welcome back</h1>
-          <p style={s.subtitle}>Sign in to your CineVault account to manage your films and screenings.</p>
+          <p style={s.subtitle}>Sign in to your Janta Cinema account to manage your films and screenings.</p>
         </div>
 
         {successMessage && (
@@ -80,7 +80,7 @@ export default function Login() {
         </form>
 
         <p style={s.signupPrompt}>
-          New to CineVault?{' '}
+          New to Janta Cinema?{' '}
           <Link to="/signup" style={s.signupLink}>Create an account</Link>
         </p>
       </div>
