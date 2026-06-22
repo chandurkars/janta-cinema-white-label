@@ -20,6 +20,7 @@ import FilmScreenPage from './pages/FilmScreenPage';
 import PremierePage from './pages/PremierePage';
 import Inquiries from './pages/Inquiries';
 import FilmManage from './pages/FilmManage';
+import FilmView from './pages/FilmView';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 
@@ -69,7 +70,8 @@ function AppRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/films" element={<Films />} />
         <Route path="/films/upload" element={<FilmUpload />} />
-        <Route path="/films/:filmId" element={<FilmManage />} />
+        <Route path="/films/:filmId" element={<FilmView />} />
+        <Route path="/films/:filmId/edit" element={<FilmManage />} />
         <Route path="/venues" element={<Venues />} />
         <Route path="/venues/new" element={<VenueForm />} />
         <Route path="/contracts" element={<Contracts />} />
