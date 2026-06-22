@@ -7,9 +7,39 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 async function decryptCVFilm(arrayBuffer, keyHex) {
   const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
   const cryptoKey = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
-  const nonce = arrayBuffer.slice(0, 12);
-  const ciphertext = arrayBuffer.slice(12);
-  return await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, cryptoKey, ciphertext);
+
+  // Detect format by magic bytes: 'JCCHUNK' = chunked (new), anything else = legacy whole-file
+  const magic = new TextDecoder().decode(new Uint8Array(arrayBuffer, 0, 7));
+  if (magic === 'JCCHUNK') {
+    // Chunked format: magic(7) + num_chunks(4) + [ciphertext_len(4) + nonce(12) + ciphertext] × N
+    const view = new DataView(arrayBuffer);
+    const numChunks = view.getUint32(7, false); // big-endian
+    const chunks = [];
+    let offset = 11; // 7 magic + 4 count
+
+    for (let i = 0; i < numChunks; i++) {
+      const ciphertextLen = view.getUint32(offset, false);
+      offset += 4;
+      const nonce = arrayBuffer.slice(offset, offset + 12);
+      offset += 12;
+      const ciphertext = arrayBuffer.slice(offset, offset + ciphertextLen);
+      offset += ciphertextLen;
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, cryptoKey, ciphertext);
+      chunks.push(new Uint8Array(plain));
+    }
+
+    // Concatenate decrypted chunks
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(totalLen);
+    let pos = 0;
+    for (const c of chunks) { out.set(c, pos); pos += c.length; }
+    return out.buffer;
+  } else {
+    // Legacy whole-file format: nonce(12) + ciphertext
+    const nonce = arrayBuffer.slice(0, 12);
+    const ciphertext = arrayBuffer.slice(12);
+    return await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, cryptoKey, ciphertext);
+  }
 }
 
 export default function FilmScreenPage() {

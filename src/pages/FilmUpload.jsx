@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveFilmMetadata, uploadFilmVideo, getFilmmakers } from '../services/api';
+import {
+  saveFilmMetadata, uploadFilmVideo, getFilmmakers,
+  startVideoMultipartUpload, completeVideoMultipartUpload,
+  abortVideoMultipartUpload, getFilmStatus,
+} from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
 const LANGUAGES = ['Hindi', 'English', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Bengali', 'Marathi', 'Gujarati', 'Punjabi', 'Other'];
@@ -23,9 +27,13 @@ export default function FilmUpload() {
 
   // Step 2 state
   const [videoFile, setVideoFile] = useState(null);
-  const [uploadPhase, setUploadPhase] = useState(''); // 'uploading' | 'encrypting' | 'done' | 'error'
-  const [uploadPct, setUploadPct] = useState(0);
+  // phases: '' | 'starting' | 'uploading' | 'completing' | 'encrypting' | 'done' | 'error'
+  const [uploadPhase, setUploadPhase] = useState('');
+  const [uploadDone, setUploadDone] = useState(0);   // parts uploaded so far
+  const [uploadTotal, setUploadTotal] = useState(0); // total parts
   const [uploadError, setUploadError] = useState('');
+  const pollRef = useRef(null);
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const [form, setForm] = useState({
     title: '', dur_mins: '', dur_secs: '0',
@@ -104,35 +112,115 @@ export default function FilmUpload() {
     }
   };
 
-  // ── Step 2: upload video ──
+  // ── Step 2: multipart upload directly to R2, then background encryption ──
   const handleUploadVideo = async () => {
     if (!videoFile) return;
-    setUploadPhase('uploading');
-    setUploadPct(0);
     setUploadError('');
+    setUploadPhase('starting');
 
+    let uploadState = null;
+
+    try {
+      // 1. Initiate — backend creates multipart upload and returns presigned URLs for all parts
+      const startRes = await startVideoMultipartUpload(savedFilm.id, videoFile.size);
+      uploadState = startRes.data;
+      const { upload_id, raw_key, part_size, total_parts, presigned_urls } = uploadState;
+
+      setUploadTotal(total_parts);
+      setUploadDone(0);
+      setUploadPhase('uploading');
+
+      // 2. Upload all parts in parallel batches of 4, directly to R2
+      const BATCH = 4;
+      const completedParts = [];
+
+      for (let batchStart = 1; batchStart <= total_parts; batchStart += BATCH) {
+        const batchNums = [];
+        for (let n = batchStart; n < batchStart + BATCH && n <= total_parts; n++) batchNums.push(n);
+
+        await Promise.all(
+          batchNums.map(async (partNum) => {
+            const offset = (partNum - 1) * part_size;
+            const chunk = videoFile.slice(offset, offset + part_size);
+            const url = presigned_urls[String(partNum)] || presigned_urls[partNum];
+
+            const res = await fetch(url, { method: 'PUT', body: chunk });
+            if (!res.ok) throw new Error(`Part ${partNum} failed (HTTP ${res.status})`);
+
+            // R2 returns ETag — may have surrounding quotes, strip them
+            const etag = (res.headers.get('ETag') || res.headers.get('etag') || '').replace(/"/g, '');
+            if (!etag) throw new Error(`Part ${partNum}: missing ETag in response`);
+
+            setUploadDone(prev => prev + 1);
+            completedParts.push({ PartNumber: partNum, ETag: `"${etag}"` });
+          })
+        );
+      }
+
+      // 3. Complete — backend assembles parts and launches background encryption
+      setUploadPhase('completing');
+      completedParts.sort((a, b) => a.PartNumber - b.PartNumber);
+      await completeVideoMultipartUpload(savedFilm.id, { upload_id, raw_key, parts: completedParts });
+
+      // 4. Poll every 6 seconds until status is 'active' or back to 'draft' (failure)
+      setUploadPhase('encrypting');
+      pollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await getFilmStatus(savedFilm.id);
+          const status = statusRes.data.status;
+          if (status === 'active') {
+            clearInterval(pollRef.current);
+            setUploadPhase('done');
+            setTimeout(() => navigate('/films'), 2500);
+          } else if (status === 'draft') {
+            clearInterval(pollRef.current);
+            setUploadPhase('error');
+            setUploadError('Server encryption failed. The film metadata is saved — click "Upload Again" to retry the video.');
+          }
+        } catch (_) {}
+      }, 6000);
+
+    } catch (err) {
+      if (uploadState) {
+        abortVideoMultipartUpload(savedFilm.id, {
+          upload_id: uploadState.upload_id,
+          raw_key: uploadState.raw_key,
+        }).catch(() => {});
+      }
+      // Fall back to old direct upload if R2 not configured (dev mode)
+      const detail = err.response?.data?.detail || '';
+      if (err.response?.status === 400 && detail.includes('R2')) {
+        await handleDirectUpload();
+        return;
+      }
+      setUploadPhase('error');
+      setUploadError(err.message || 'Upload failed. Please try again.');
+    }
+  };
+
+  // Legacy direct upload (dev mode / no R2)
+  const handleDirectUpload = async () => {
+    setUploadPhase('uploading');
     const fd = new FormData();
     fd.append('video', videoFile);
-
     try {
       await uploadFilmVideo(savedFilm.id, fd, (evt) => {
         if (evt.total) {
-          const pct = Math.round((evt.loaded * 100) / evt.total);
-          setUploadPct(pct);
-          if (pct >= 100) setUploadPhase('encrypting');
+          setUploadDone(Math.round((evt.loaded / evt.total) * 100));
+          setUploadTotal(100);
+          if (evt.loaded >= evt.total) setUploadPhase('encrypting');
         }
       });
       setUploadPhase('done');
       setTimeout(() => navigate('/films'), 2500);
     } catch (err) {
       const detail = err.response?.data?.detail;
-      const msg = typeof detail === 'string' ? detail : err.message || 'Upload failed.';
       setUploadPhase('error');
-      setUploadError(msg);
+      setUploadError(typeof detail === 'string' ? detail : err.message || 'Upload failed.');
     }
   };
 
-  const uploading = ['uploading', 'encrypting'].includes(uploadPhase);
+  const uploading = ['starting', 'uploading', 'completing', 'encrypting'].includes(uploadPhase);
 
   // ── Render ──
   return (
@@ -296,19 +384,34 @@ export default function FilmUpload() {
             {uploadPhase && (
               <div style={{ ...s.progressBox, marginTop: 16 }}>
                 <div style={s.progressLabel}>
-                  {uploadPhase === 'uploading' && `⬆ Uploading… ${uploadPct}%`}
-                  {uploadPhase === 'encrypting' && '🔐 Encrypting on server — almost done…'}
-                  {uploadPhase === 'done' && '✅ Upload complete! Redirecting to films list…'}
-                  {uploadPhase === 'error' && `❌ ${uploadError}`}
+                  {uploadPhase === 'starting'   && '⏳ Preparing upload…'}
+                  {uploadPhase === 'uploading'  && `☁ Uploading directly to cloud… ${uploadDone} / ${uploadTotal} parts`}
+                  {uploadPhase === 'completing' && '🔗 Finalising upload on cloud…'}
+                  {uploadPhase === 'encrypting' && '🔐 Encrypting on server — this may take a few minutes for large films…'}
+                  {uploadPhase === 'done'       && '✅ Film ready! Redirecting to films list…'}
+                  {uploadPhase === 'error'      && `❌ ${uploadError}`}
                 </div>
-                {uploadPhase !== 'error' && (
+                {!['error', 'done'].includes(uploadPhase) && (
                   <div style={s.barTrack}>
                     <div style={{
                       ...s.barFill,
-                      width: uploadPhase === 'done' ? '100%' : uploadPhase === 'encrypting' ? '100%' : `${uploadPct}%`,
-                      background: uploadPhase === 'done' ? '#10b981' : '#f59e0b',
-                      animation: uploadPhase === 'encrypting' ? 'pulse-bar 1.4s ease-in-out infinite' : 'none',
+                      width: uploadPhase === 'uploading' && uploadTotal > 0
+                        ? `${Math.round((uploadDone / uploadTotal) * 100)}%`
+                        : ['encrypting', 'completing'].includes(uploadPhase) ? '100%' : '5%',
+                      background: '#f59e0b',
+                      animation: ['starting', 'completing', 'encrypting'].includes(uploadPhase)
+                        ? 'pulse-bar 1.4s ease-in-out infinite' : 'none',
                     }} />
+                  </div>
+                )}
+                {uploadPhase === 'uploading' && uploadTotal > 0 && (
+                  <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 4 }}>
+                    {Math.round((uploadDone / uploadTotal) * 100)}% — file travels directly to cloud storage, bypassing the server
+                  </div>
+                )}
+                {uploadPhase === 'encrypting' && (
+                  <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 4 }}>
+                    AES-256 encryption running on server — page will auto-advance when done
                   </div>
                 )}
               </div>
@@ -330,7 +433,7 @@ export default function FilmUpload() {
               onClick={handleUploadVideo}
               style={{ ...s.submitBtn, opacity: (!videoFile || uploading || uploadPhase === 'done') ? 0.6 : 1 }}
             >
-              {uploading ? 'Uploading & Encrypting…' : uploadPhase === 'done' ? '✅ Done!' : 'Upload & Encrypt Film →'}
+              {uploading ? 'Uploading…' : uploadPhase === 'done' ? '✅ Done!' : uploadPhase === 'error' ? 'Upload Again →' : 'Upload & Encrypt Film →'}
             </button>
             {uploadPhase !== 'done' && (
               <button type="button" onClick={() => navigate('/films')} style={s.skipBtn}>

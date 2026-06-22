@@ -35,6 +35,8 @@ export const createTenant = (data) => api.post('/tenants/', data);
 export const getFilms = () => api.get('/films/');
 export const createFilm = (data) => api.post('/films/', data);
 export const uploadFilm = (formData, onUploadProgress) => api.post('/films/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }, onUploadProgress });
+export const saveFilmMetadata = (formData) => api.post('/films/metadata', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+export const uploadFilmVideo = (filmId, formData, onUploadProgress) => api.post(`/films/${filmId}/video`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, onUploadProgress });
 export const deleteFilm = (filmId) => api.delete(`/films/${filmId}`);
 export const assignFilm = (filmId, tenantId) => api.post(`/films/${filmId}/assign/${tenantId}`);
 export const getFilmAssignments = (filmId) => api.get(`/films/${filmId}/assignments`);
@@ -71,6 +73,15 @@ export const createUser = (data) => api.post('/users/', data);
 // Public film catalogue (no auth)
 export const getPublicFilms = () => api.get('/films/public');
 export const getPublicFilm = (slug) => api.get(`/films/public/${slug}`);
+
+// Presigned multipart upload (large films — bypasses Railway RAM)
+export const startVideoMultipartUpload = (filmId, fileSize) =>
+  api.post(`/films/${filmId}/video/multipart/start`, { file_size: fileSize });
+export const completeVideoMultipartUpload = (filmId, data) =>
+  api.post(`/films/${filmId}/video/multipart/complete`, data);
+export const abortVideoMultipartUpload = (filmId, data) =>
+  api.post(`/films/${filmId}/video/multipart/abort`, data);
+export const getFilmStatus = (filmId) => api.get(`/films/${filmId}/status`);
 
 // Rent inquiries
 export const submitInquiry = (data) => api.post('/inquiries/', data);
