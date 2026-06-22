@@ -91,8 +91,7 @@ export default function FilmView() {
       }
       setNewKeys(res.data);
       setKeyForm({ valid_from: '', valid_to: '', num_shows: 1 });
-      notify('Keys generated! 🎬 Redirecting to Screening Keys…');
-      setTimeout(() => navigate('/keys'), 2000);
+      notify('Keys generated! 🎬');
     } catch (err) {
       notify(err.response?.data?.detail || 'Failed to generate keys', false);
     } finally {
@@ -260,22 +259,57 @@ export default function FilmView() {
           {/* Generated keys */}
           {newKeys && (
             <div style={{ marginTop: '1.25rem', background: '#0f172a', borderRadius: '10px', border: '1px solid #334155', overflow: 'hidden' }}>
-              <div style={{ padding: '0.55rem 1rem', background: '#0a1628', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: '700' }}>✓ Keys Generated</span>
-                <span style={{ color: '#475569', fontSize: '0.75rem' }}>Share with your venue</span>
-              </div>
-              <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={keyTypeSt}>📥 Download</span>
-                <code style={keyCodeSt}>{newKeys.download_key?.key_token}</code>
-                <button onClick={() => copy(newKeys.download_key?.key_token, 'Download key', notify)} style={cpBtnSt}>Copy</button>
-              </div>
-              {newKeys.streaming_keys?.map((k, i) => (
-                <div key={k.id} style={{ padding: '0.5rem 1rem', borderBottom: i < newKeys.streaming_keys.length - 1 ? '1px solid #1e293b' : 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={keyTypeSt}>Show {i + 1}</span>
-                  <code style={keyCodeSt}>{k.key_token}</code>
-                  <button onClick={() => copy(k.key_token, `Show ${i + 1} key`, notify)} style={cpBtnSt}>Copy</button>
+              <div style={{ padding: '0.55rem 1rem', background: '#0a1628', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: '700' }}>✓ Keys Generated</span>
+                  <span style={{ color: '#475569', fontSize: '0.75rem' }}>Share with your venue</span>
                 </div>
-              ))}
+                <button onClick={() => navigate('/keys')} style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}>
+                  View all keys →
+                </button>
+              </div>
+
+              {/* Download key row */}
+              {newKeys.download_key && (() => {
+                const dlUrl = film.slug ? `https://vdojar.in/film/${film.slug}/download` : null;
+                return (
+                  <div style={{ padding: '0.65rem 1rem', borderBottom: '1px solid #1e293b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: dlUrl ? '6px' : 0 }}>
+                      <span style={keyTypeSt}>📥 Download Key</span>
+                      <code style={keyCodeSt}>{newKeys.download_key.key_token}</code>
+                      <button onClick={() => copy(newKeys.download_key.key_token, 'Download key', notify)} style={cpBtnSt}>Copy Key</button>
+                    </div>
+                    {dlUrl && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ ...keyTypeSt, opacity: 0 }}>placeholder</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dlUrl}</span>
+                        <button onClick={() => copy(dlUrl, 'Download link', notify)} style={cpBtnSt}>Copy Link</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Show keys */}
+              {newKeys.streaming_keys?.map((k, i) => {
+                const scUrl = film.slug ? `https://vdojar.in/film/${film.slug}/screen` : null;
+                return (
+                  <div key={k.id} style={{ padding: '0.65rem 1rem', borderBottom: i < newKeys.streaming_keys.length - 1 ? '1px solid #1e293b' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: scUrl ? '6px' : 0 }}>
+                      <span style={keyTypeSt}>Show {i + 1} Key</span>
+                      <code style={keyCodeSt}>{k.key_token}</code>
+                      <button onClick={() => copy(k.key_token, `Show ${i + 1} key`, notify)} style={cpBtnSt}>Copy Key</button>
+                    </div>
+                    {scUrl && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ ...keyTypeSt, opacity: 0 }}>placeholder</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scUrl}</span>
+                        <button onClick={() => copy(scUrl, 'Screening link', notify)} style={cpBtnSt}>Copy Link</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

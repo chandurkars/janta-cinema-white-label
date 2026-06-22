@@ -53,6 +53,7 @@ export default function FilmManage() {
   // Image replacement
   const [newPoster, setNewPoster] = useState(null);
   const [newThumbH, setNewThumbH] = useState(null);
+  const [newThumbSq, setNewThumbSq] = useState(null);
   const [imgSaving, setImgSaving] = useState(false);
   const [imgMsg, setImgMsg] = useState('');
   const [imgError, setImgError] = useState('');
@@ -155,18 +156,20 @@ export default function FilmManage() {
 
   // ── Update images ──
   const handleUpdateImages = async () => {
-    if (!newPoster && !newThumbH) return;
+    if (!newPoster && !newThumbH && !newThumbSq) return;
     setImgSaving(true);
     setImgMsg('');
     setImgError('');
     const fd = new FormData();
     if (newPoster) fd.append('poster', newPoster);
     if (newThumbH) fd.append('thumbnail_h', newThumbH);
+    if (newThumbSq) fd.append('thumbnail_v', newThumbSq);
     try {
       const res = await updateFilmMetadata(filmId, fd);
       setFilm(res.data);
       setNewPoster(null);
       setNewThumbH(null);
+      setNewThumbSq(null);
       setNewThumbV(null);
       setImgMsg('Images updated.');
     } catch (err) {
@@ -545,6 +548,13 @@ export default function FilmManage() {
             aspect="16/9"
           />
           <ImagePicker
+            label="Square Thumbnail (1:1)"
+            currentUrl={resolveUrl(film.thumbnail_v_url)}
+            newFile={newThumbSq}
+            onPick={setNewThumbSq}
+            aspect="1/1"
+          />
+          <ImagePicker
             label="Poster (2:3)"
             currentUrl={resolveUrl(film.poster_url)}
             newFile={newPoster}
@@ -556,9 +566,9 @@ export default function FilmManage() {
         {imgMsg && <div style={s.successBox}>{imgMsg}</div>}
         <button
           type="button"
-          disabled={(!newPoster && !newThumbH) || imgSaving}
+          disabled={(!newPoster && !newThumbH && !newThumbSq) || imgSaving}
           onClick={handleUpdateImages}
-          style={{ ...s.primaryBtn, opacity: (!newPoster && !newThumbH) || imgSaving ? 0.6 : 1 }}
+          style={{ ...s.primaryBtn, opacity: (!newPoster && !newThumbH && !newThumbSq) || imgSaving ? 0.6 : 1 }}
         >
           {imgSaving ? 'Uploading...' : 'Update Images'}
         </button>
