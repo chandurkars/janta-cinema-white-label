@@ -50,6 +50,7 @@ export default function FilmUpload() {
   const [thumbVFile, setThumbVFile] = useState(null);
   const [thumbHPreview, setThumbHPreview] = useState(null);
   const [thumbVPreview, setThumbVPreview] = useState(null);
+  const [trailerFile, setTrailerFile] = useState(null);
 
   useEffect(() => {
     if (!isFilmmaker && !isDistributor) {
@@ -96,6 +97,7 @@ export default function FilmUpload() {
     if (posterFile) fd.append('poster', posterFile);
     if (thumbHFile) fd.append('thumbnail_h', thumbHFile);
     if (thumbVFile) fd.append('thumbnail_v', thumbVFile);
+    if (trailerFile) fd.append('trailer', trailerFile);
 
     try {
       const res = await saveFilmMetadata(fd);
@@ -334,7 +336,7 @@ export default function FilmUpload() {
             </div>
           </Section>
 
-          <Section title="2. Thumbnails & Poster" icon="🖼">
+          <Section title="2. Thumbnails, Poster & Trailer" icon="🖼">
             <p style={s.hint}>Horizontal thumbnail is shown on the film catalogue grid. Vertical is used in mobile / detail views.</p>
             <Row>
               <Field label="Horizontal (1920 × 1080)" flex={2}>
@@ -345,6 +347,31 @@ export default function FilmUpload() {
               </Field>
               <Field label="Official Poster">
                 <ThumbPicker preview={null} label={posterFile?.name} onChange={f => setPosterFile(f)} aspect="2/3" hint="Optional" />
+              </Field>
+            </Row>
+            <Row>
+              <Field label="Trailer (optional)" flex={4}>
+                <div style={s.trailerPicker}>
+                  <span style={{ fontSize: '1.4rem' }}>🎞</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: trailerFile ? '#10b981' : '#94a3b8', fontSize: '0.875rem', fontWeight: 600 }}>
+                      {trailerFile ? trailerFile.name : 'No trailer selected'}
+                    </div>
+                    <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: 2 }}>
+                      {trailerFile
+                        ? `${(trailerFile.size / 1024 / 1024).toFixed(1)} MB — auto-plays on the film detail page`
+                        : 'MP4 recommended · max 200 MB · auto-plays muted on the film page'}
+                    </div>
+                  </div>
+                  <label style={s.trailerBtn}>
+                    {trailerFile ? 'Change' : 'Choose Trailer'}
+                    <input type="file" accept="video/*,.mp4,.mov,.webm" style={{ display: 'none' }}
+                      onChange={e => { if (e.target.files[0]) setTrailerFile(e.target.files[0]); }} />
+                  </label>
+                  {trailerFile && (
+                    <button type="button" style={s.fileChipRemove} onClick={() => setTrailerFile(null)}>✕</button>
+                  )}
+                </div>
               </Field>
             </Row>
           </Section>
@@ -582,6 +609,8 @@ const s = {
   fileChipRemove: { background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', padding: '0 4px' },
   thumbBox: { width: '100%', background: '#0f172a', borderRadius: 8, border: '1px dashed #334155', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 80, overflow: 'hidden' },
   thumbPlaceholder: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '1rem' },
+  trailerPicker: { display: 'flex', alignItems: 'center', gap: 12, background: '#0f172a', border: '1px dashed #334155', borderRadius: 8, padding: '0.75rem 1rem' },
+  trailerBtn: { padding: '0.45rem 1rem', borderRadius: 7, background: '#1e293b', border: '1px solid #334155', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' },
   progressBox: { background: '#0f172a', borderRadius: 10, padding: '1rem' },
   progressLabel: { color: '#e2e8f0', fontSize: '0.875rem', fontWeight: 500, marginBottom: 8 },
   barTrack: { height: 6, borderRadius: 99, background: '#334155', overflow: 'hidden' },

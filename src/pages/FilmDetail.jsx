@@ -51,20 +51,32 @@ export default function FilmDetail() {
         <Link to="/" style={s.backLink}>← Back to catalogue</Link>
       </div>
 
-      {/* Hero */}
+      {/* Hero — trailer auto-play if available, else thumbnail */}
       <div style={s.hero}>
-        {thumbSrc && (
+        {film.trailer_url ? (
+          <div style={s.heroImgWrap}>
+            <video
+              key={film.slug}
+              src={`${API_BASE}/films/public/${film.slug}/trailer`}
+              style={{ ...s.heroImg, objectFit: 'cover' }}
+              autoPlay muted loop playsInline
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+            <div style={s.heroShade} />
+          </div>
+        ) : thumbSrc ? (
           <div style={s.heroImgWrap}>
             <img src={thumbSrc} alt={film.title} style={s.heroImg} />
             <div style={s.heroShade} />
           </div>
-        )}
+        ) : null}
         <div style={s.heroContent}>
           <div style={s.badges}>
             {film.certificate && <span style={s.badge}>{film.certificate}</span>}
             {film.genre && <span style={s.badge}>{film.genre}</span>}
             {film.language && <span style={s.badge}>{film.language}</span>}
             {film.category && <span style={{ ...s.badge, background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>{film.category}</span>}
+            {film.trailer_url && <span style={{ ...s.badge, background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>▶ Trailer</span>}
           </div>
           <h1 style={s.heroTitle}>{film.title}</h1>
           {film.director && <p style={s.heroMeta}>Directed by <strong>{film.director}</strong></p>}
