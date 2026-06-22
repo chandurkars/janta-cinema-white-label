@@ -34,11 +34,17 @@ import { getPublicFilms } from "../services/api";
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 function resolveThumb(film) {
-  // Prioritise poster_url (square) for the card grid; fall back to thumbnails
   const url = film.poster_url || film.thumbnail_h_url || film.thumbnail_v_url;
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE}/films/poster/${url.split('/').pop()}`;
+  if (url.startsWith('http')) {
+    try {
+      const key = new URL(url).pathname.replace(/^\/+/, '');
+      if (key) return `${API_BASE}/films/image/${key}`;
+    } catch {}
+    return url;
+  }
+  if (url.startsWith('/')) return `${API_BASE}/films/image/${url.replace(/^\/+/, '')}`;
+  return `${API_BASE}/films/poster/${url}`;
 }
 
 const films = [
@@ -339,6 +345,19 @@ export default function JantaCinemaLanding() {
         <div>
           <strong>Janta Cinema Theatre</strong>
           <span>Secure private screenings for approved partners.</span>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          <a href="/terms" style={{ color: 'var(--muted)', fontSize: '0.8rem', textDecoration: 'none' }}
+            onMouseEnter={e => e.target.style.color = 'var(--text)'}
+            onMouseLeave={e => e.target.style.color = 'var(--muted)'}>
+            Terms &amp; Conditions
+          </a>
+          <a href="/privacy" style={{ color: 'var(--muted)', fontSize: '0.8rem', textDecoration: 'none' }}
+            onMouseEnter={e => e.target.style.color = 'var(--text)'}
+            onMouseLeave={e => e.target.style.color = 'var(--muted)'}>
+            Privacy Policy
+          </a>
+          <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>© 2023 Yen Movie Studios Pvt. Ltd.</span>
         </div>
       </footer>
     </main>

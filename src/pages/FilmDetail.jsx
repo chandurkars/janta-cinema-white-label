@@ -8,9 +8,15 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 function resolveUrl(url) {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  const filename = url.split('/').pop();
-  return `${API_BASE}/films/poster/${filename}`;
+  if (url.startsWith('http')) {
+    try {
+      const key = new URL(url).pathname.replace(/^\/+/, '');
+      if (key) return `${API_BASE}/films/image/${key}`;
+    } catch {}
+    return url;
+  }
+  if (url.startsWith('/')) return `${API_BASE}/films/image/${url.replace(/^\/+/, '')}`;
+  return `${API_BASE}/films/poster/${url}`;
 }
 
 export default function FilmDetail() {
@@ -147,6 +153,14 @@ export default function FilmDetail() {
         </div>
       </div>
 
+      <div style={s.footer}>
+        <span style={s.footerText}>© 2023 Yen Movie Studios Pvt. Ltd.</span>
+        <div style={s.footerLinks}>
+          <Link to="/terms" style={s.footerLink}>Terms &amp; Conditions</Link>
+          <Link to="/privacy" style={s.footerLink}>Privacy Policy</Link>
+        </div>
+      </div>
+
       {rentModal && (
         <RentModal
           film={film}
@@ -173,17 +187,17 @@ const s = {
   topBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 2rem', borderBottom: '1px solid #1e293b' },
   brandLink: { textDecoration: 'none' },
   backLink: { color: '#64748b', fontSize: '0.875rem', textDecoration: 'none' },
-  hero: { position: 'relative', minHeight: 340, display: 'flex', alignItems: 'flex-end' },
+  hero: { position: 'relative', minHeight: 520, display: 'flex', alignItems: 'flex-end', background: 'linear-gradient(150deg, #0f1f3d 0%, #1e293b 100%)' },
   heroImgWrap: { position: 'absolute', inset: 0, overflow: 'hidden' },
-  heroImg: { width: '100%', height: '100%', objectFit: 'cover', opacity: 0.35 },
-  heroShade: { position: 'absolute', inset: 0, background: 'linear-gradient(to top, #0f172a 30%, transparent)' },
-  heroContent: { position: 'relative', padding: '2rem 2.5rem', maxWidth: 800, zIndex: 1 },
-  badges: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
-  badge: { padding: '2px 10px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.1)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)' },
-  heroTitle: { fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 800, margin: '0 0 8px 0', letterSpacing: '-0.02em' },
-  heroMeta: { color: '#94a3b8', fontSize: '0.9rem', margin: '0 0 12px 0' },
-  heroSynopsis: { color: '#cbd5e1', fontSize: '0.95rem', lineHeight: 1.6, margin: '0 0 16px 0', maxWidth: 600 },
-  heroPriceFrom: { color: '#94a3b8', fontSize: '0.9rem', margin: 0 },
+  heroImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  heroShade: { position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0.75) 35%, rgba(15,23,42,0.2) 65%, rgba(0,0,0,0) 100%)' },
+  heroContent: { position: 'relative', padding: '2.5rem 2.5rem 2rem', maxWidth: 800, zIndex: 1 },
+  badges: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 },
+  badge: { padding: '3px 11px', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.12)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(4px)' },
+  heroTitle: { fontSize: 'clamp(2rem, 4.5vw, 3.25rem)', fontWeight: 800, margin: '0 0 10px 0', letterSpacing: '-0.02em', textShadow: '0 2px 24px rgba(0,0,0,0.6)' },
+  heroMeta: { color: '#94a3b8', fontSize: '0.9rem', margin: '0 0 12px 0', textShadow: '0 1px 8px rgba(0,0,0,0.8)' },
+  heroSynopsis: { color: '#cbd5e1', fontSize: '0.95rem', lineHeight: 1.6, margin: '0 0 18px 0', maxWidth: 600, textShadow: '0 1px 8px rgba(0,0,0,0.8)' },
+  heroPriceFrom: { color: '#94a3b8', fontSize: '0.9rem', margin: 0, textShadow: '0 1px 8px rgba(0,0,0,0.8)' },
   body: { display: 'flex', gap: '2rem', padding: '2rem 2.5rem', alignItems: 'flex-start', flexWrap: 'wrap' },
   main: { flex: '1 1 400px' },
   infoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' },
@@ -207,4 +221,8 @@ const s = {
   packRent: { color: '#64748b', fontSize: '0.78rem' },
   packBtnSingle: { width: '100%', padding: '0.875rem', borderRadius: 10, background: '#f59e0b', color: '#0f172a', border: 'none', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' },
   pricingNote: { color: '#475569', fontSize: '0.72rem', textAlign: 'center', marginTop: 14, lineHeight: 1.5 },
+  footer: { borderTop: '1px solid #1e293b', padding: '1.5rem 2.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' },
+  footerText: { color: '#334155', fontSize: '0.78rem' },
+  footerLinks: { display: 'flex', gap: '1.5rem' },
+  footerLink: { color: '#475569', fontSize: '0.78rem', textDecoration: 'none' },
 };

@@ -6,10 +6,15 @@ import { useAuth } from '../hooks/useAuth';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const resolvePosterUrl = (url) => {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  // Stored as /posters/filename.jpg — route through the backend presigned URL endpoint
-  const filename = url.split('/').pop();
-  return `${API_BASE}/films/poster/${filename}`;
+  if (url.startsWith('http')) {
+    try {
+      const key = new URL(url).pathname.replace(/^\/+/, '');
+      if (key) return `${API_BASE}/films/image/${key}`;
+    } catch {}
+    return url;
+  }
+  if (url.startsWith('/')) return `${API_BASE}/films/image/${url.replace(/^\/+/, '')}`;
+  return `${API_BASE}/films/poster/${url}`;
 };
 
 export default function Films() {

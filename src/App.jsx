@@ -20,6 +20,8 @@ import FilmScreenPage from './pages/FilmScreenPage';
 import PremierePage from './pages/PremierePage';
 import Inquiries from './pages/Inquiries';
 import FilmManage from './pages/FilmManage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -43,6 +45,10 @@ function AppRoutes() {
       {/* Public screening player — no login required, key is the auth */}
       <Route path="/screen" element={<Player />} />
       <Route path="/screen/:keyToken" element={<Player />} />
+
+      {/* Legal pages */}
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
 
       {/* Public film detail + enquiry */}
       <Route path="/film/:slug" element={<FilmDetail />} />

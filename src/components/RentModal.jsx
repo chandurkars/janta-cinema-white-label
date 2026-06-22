@@ -164,7 +164,7 @@ const s = {
   packOptPrice: { color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem' },
   noPrice: { background: '#0f172a', borderRadius: 8, padding: '0.6rem 1rem', color: '#64748b', fontSize: '0.82rem', marginBottom: '1rem' },
   errorBox: { background: 'rgba(220,38,38,0.12)', border: '1px solid #dc2626', color: '#fca5a5', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.82rem', marginBottom: '1rem' },
-  form: { display: 'flex', flexDirection: 'column' },
+  form: { display: 'block' },
   input: { padding: '0.6rem 0.75rem', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box' },
   agreements: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: '1.25rem', marginTop: 4 },
   checkLabel: { display: 'flex', alignItems: 'flex-start', gap: 8, color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.4, cursor: 'pointer' },
