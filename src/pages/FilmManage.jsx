@@ -53,7 +53,6 @@ export default function FilmManage() {
   // Image replacement
   const [newPoster, setNewPoster] = useState(null);
   const [newThumbH, setNewThumbH] = useState(null);
-  const [newThumbV, setNewThumbV] = useState(null);
   const [imgSaving, setImgSaving] = useState(false);
   const [imgMsg, setImgMsg] = useState('');
   const [imgError, setImgError] = useState('');
@@ -156,14 +155,13 @@ export default function FilmManage() {
 
   // ── Update images ──
   const handleUpdateImages = async () => {
-    if (!newPoster && !newThumbH && !newThumbV) return;
+    if (!newPoster && !newThumbH) return;
     setImgSaving(true);
     setImgMsg('');
     setImgError('');
     const fd = new FormData();
     if (newPoster) fd.append('poster', newPoster);
     if (newThumbH) fd.append('thumbnail_h', newThumbH);
-    if (newThumbV) fd.append('thumbnail_v', newThumbV);
     try {
       const res = await updateFilmMetadata(filmId, fd);
       setFilm(res.data);
@@ -547,13 +545,6 @@ export default function FilmManage() {
             aspect="16/9"
           />
           <ImagePicker
-            label="Vertical Thumbnail (2:3)"
-            currentUrl={resolveUrl(film.thumbnail_v_url)}
-            newFile={newThumbV}
-            onPick={setNewThumbV}
-            aspect="2/3"
-          />
-          <ImagePicker
             label="Poster (2:3)"
             currentUrl={resolveUrl(film.poster_url)}
             newFile={newPoster}
@@ -565,9 +556,9 @@ export default function FilmManage() {
         {imgMsg && <div style={s.successBox}>{imgMsg}</div>}
         <button
           type="button"
-          disabled={(!newPoster && !newThumbH && !newThumbV) || imgSaving}
+          disabled={(!newPoster && !newThumbH) || imgSaving}
           onClick={handleUpdateImages}
-          style={{ ...s.primaryBtn, opacity: (!newPoster && !newThumbH && !newThumbV) || imgSaving ? 0.6 : 1 }}
+          style={{ ...s.primaryBtn, opacity: (!newPoster && !newThumbH) || imgSaving ? 0.6 : 1 }}
         >
           {imgSaving ? 'Uploading...' : 'Update Images'}
         </button>
