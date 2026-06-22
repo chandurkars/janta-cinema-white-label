@@ -91,7 +91,8 @@ export default function FilmView() {
       }
       setNewKeys(res.data);
       setKeyForm({ valid_from: '', valid_to: '', num_shows: 1 });
-      notify('Keys generated! 🎬');
+      notify('Keys generated! 🎬 Redirecting to Screening Keys…');
+      setTimeout(() => navigate('/keys'), 2000);
     } catch (err) {
       notify(err.response?.data?.detail || 'Failed to generate keys', false);
     } finally {

@@ -434,7 +434,7 @@ export default function ScreeningKeys() {
         const { dlKey, showKeys } = sc;
         const anyKey = dlKey || showKeys[0];
         const filmTitle = anyKey?.film_title || 'Unknown Film';
-        const slug = anyKey?.film_slug;
+        const slug = anyKey?.film_slug || anyKey?.film_id;
         const from = anyKey?.valid_from;
         const to = anyKey?.valid_to;
         const cst = cardStatus(from, to, showKeys);
@@ -470,7 +470,7 @@ export default function ScreeningKeys() {
                   </div>
                 </div>
               ) : (
-                <p style={s.warn}>⚠ Link not available — please re-upload the film to get shareable links.</p>
+                <p style={s.warn}>⚠ Download link not available — film slug is not set. Add a slug in the film edit page.</p>
               )}
               <div style={s.actionRow}>
                 {waMsg && (
@@ -496,7 +496,7 @@ export default function ScreeningKeys() {
               <p style={s.sectionDesc}>Send each show's key on the day of the screening only. Every key works exactly once.</p>
               <div style={s.showGrid}>
                 {showKeys.map((sk, j) => {
-                  const scUrl = slug ? `${BASE}/film/${slug}/screen` : null;
+                  const scUrl = anyKey?.film_slug ? `${BASE}/film/${anyKey.film_slug}/screen` : null;
                   const msg = showWAMsg(sk, filmTitle, slug, j + 1, showKeys.length);
                   return (
                     <div key={sk.id} style={s.showCard}>
