@@ -3,6 +3,15 @@ import { Link } from 'react-router-dom';
 import { getFilms, getTenants, assignFilm, getFilmAssignments, removeFilmAssignment, deleteFilm } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const resolvePosterUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  // Stored as /posters/filename.jpg — route through the backend presigned URL endpoint
+  const filename = url.split('/').pop();
+  return `${API_BASE}/films/poster/${filename}`;
+};
+
 export default function Films() {
   const { user } = useAuth();
   const [films, setFilms] = useState([]);
@@ -95,8 +104,8 @@ export default function Films() {
         {films.map(f => (
           <div key={f.id} style={styles.row}>
             <span style={{ flex: '0 0 48px' }}>
-              {f.poster_url
-                ? <img src={f.poster_url} alt="" style={{ width: 48, height: 64, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+              {resolvePosterUrl(f.poster_url)
+                ? <img src={resolvePosterUrl(f.poster_url)} alt="" style={{ width: 48, height: 64, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
                 : <div style={{ width: 48, height: 64, borderRadius: 6, background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🎬</div>
               }
             </span>
