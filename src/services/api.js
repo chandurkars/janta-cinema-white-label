@@ -33,6 +33,9 @@ export const createTenant = (data) => api.post('/tenants/', data);
 
 // Films
 export const getFilms = () => api.get('/films/');
+export const getFilm = (filmId) => api.get(`/films/${filmId}`);
+export const updateFilmMetadata = (filmId, formData) =>
+  api.patch(`/films/${filmId}/metadata`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const createFilm = (data) => api.post('/films/', data);
 export const uploadFilm = (formData, onUploadProgress) => api.post('/films/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }, onUploadProgress });
 export const saveFilmMetadata = (formData) => api.post('/films/metadata', formData, { headers: { 'Content-Type': 'multipart/form-data' } });

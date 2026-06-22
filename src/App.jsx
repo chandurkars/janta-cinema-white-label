@@ -19,6 +19,7 @@ import FilmDownloadPage from './pages/FilmDownloadPage';
 import FilmScreenPage from './pages/FilmScreenPage';
 import PremierePage from './pages/PremierePage';
 import Inquiries from './pages/Inquiries';
+import FilmManage from './pages/FilmManage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -62,6 +63,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/films" element={<Films />} />
         <Route path="/films/upload" element={<FilmUpload />} />
+        <Route path="/films/:filmId" element={<FilmManage />} />
         <Route path="/venues" element={<Venues />} />
         <Route path="/venues/new" element={<VenueForm />} />
         <Route path="/contracts" element={<Contracts />} />

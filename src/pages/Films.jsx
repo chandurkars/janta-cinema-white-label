@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getFilms, getTenants, assignFilm, getFilmAssignments, removeFilmAssignment, deleteFilm } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
@@ -14,6 +14,7 @@ const resolvePosterUrl = (url) => {
 
 export default function Films() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [films, setFilms] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [assignments, setAssignments] = useState({});
@@ -102,7 +103,7 @@ export default function Films() {
           {(user?.role === 'platform_admin' || user?.role === 'filmmaker' || user?.role === 'aggregator_admin') && <span style={{ flex: '0 0 60px' }}></span>}
         </div>
         {films.map(f => (
-          <div key={f.id} style={styles.row}>
+          <div key={f.id} style={{ ...styles.row, cursor: 'pointer' }} onClick={() => navigate(`/films/${f.id}`)}>
             <span style={{ flex: '0 0 48px' }}>
               {resolvePosterUrl(f.poster_url)
                 ? <img src={resolvePosterUrl(f.poster_url)} alt="" style={{ width: 48, height: 64, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
@@ -110,7 +111,7 @@ export default function Films() {
               }
             </span>
             <span style={styles.col}>
-              <strong>{f.title}</strong>
+              <strong style={{ color: '#e2e8f0' }}>{f.title}</strong>
               {f.synopsis && <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '2px' }}>{f.synopsis.slice(0, 60)}...</div>}
             </span>
             <span style={styles.colSm}>{Math.floor(f.duration_minutes)}m {Math.round((f.duration_minutes % 1) * 60)}s</span>
@@ -121,18 +122,18 @@ export default function Films() {
             </span>
             {(user?.role === 'platform_admin' || user?.role === 'filmmaker' || user?.role === 'aggregator_admin') && (
               <span style={{ flex: '0 0 60px', display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={() => handleDelete(f.id, f.title)} style={styles.deleteBtn} title="Delete film">
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id, f.title); }} style={styles.deleteBtn} title="Delete film">
                   🗑
                 </button>
               </span>
             )}
             {user?.role === 'platform_admin' && (
-              <span style={{ flex: 2 }}>
+              <span style={{ flex: 2 }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
                   {(assignments[f.id] || []).map(a => (
                     <span key={a.tenant_id} style={styles.assignedTag}>
                       {a.tenant_name}
-                      <button onClick={() => handleRemoveAssignment(f.id, a.tenant_id, a.tenant_name)}
+                      <button onClick={(e) => { e.stopPropagation(); handleRemoveAssignment(f.id, a.tenant_id, a.tenant_name); }}
                         style={styles.removeBtn}>×</button>
                     </span>
                   ))}
@@ -144,12 +145,12 @@ export default function Films() {
                         {tenants.filter(t => !(assignments[f.id] || []).some(a => a.tenant_id === t.id))
                           .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
-                      <button onClick={() => handleAssign(f.id)} style={styles.assignBtn}>Go</button>
-                      <button onClick={() => setAssignForm({ filmId: null, tenantId: '' })}
+                      <button onClick={(e) => { e.stopPropagation(); handleAssign(f.id); }} style={styles.assignBtn}>Go</button>
+                      <button onClick={(e) => { e.stopPropagation(); setAssignForm({ filmId: null, tenantId: '' }); }}
                         style={{ ...styles.assignBtn, background: '#334155' }}>×</button>
                     </div>
                   ) : (
-                    <button onClick={() => setAssignForm({ filmId: f.id, tenantId: '' })} style={styles.assignTrigger}>+</button>
+                    <button onClick={(e) => { e.stopPropagation(); setAssignForm({ filmId: f.id, tenantId: '' }); }} style={styles.assignTrigger}>+</button>
                   )}
                 </div>
               </span>
