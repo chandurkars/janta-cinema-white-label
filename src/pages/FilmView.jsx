@@ -348,7 +348,7 @@ export default function FilmView() {
             const now = new Date();
             const isActive = new Date(from) <= now && new Date(to) >= now;
             const isUpcoming = new Date(from) > now;
-            const pill = isUpcoming ? { label: 'Upcoming', color: '#3b82f6' } : isActive ? { label: 'Active', color: '#f59e0b' } : { label: 'Window Open', color: '#10b981' };
+            const pill = isActive ? { label: 'Active', color: '#10b981' } : isUpcoming ? { label: 'Upcoming', color: '#475569' } : { label: 'Closing Soon', color: '#475569' };
 
             return (
               <div key={i} style={{ background: '#1e293b', borderRadius: '12px', border: '1px solid #334155', marginBottom: '0.75rem', overflow: 'hidden' }}>
