@@ -15,17 +15,43 @@ async function decryptJCFilm(arrayBuffer, keyHex) {
   return await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, cryptoKey, ciphertext);
 }
 
+// Returns 'ok' | 'mirror' | 'unavailable'
+async function checkDisplayMode() {
+  if (!('getScreenDetails' in window)) return 'unavailable';
+  try {
+    const sd = await window.getScreenDetails();
+    const screens = sd.screens;
+    // Only 1 screen — projector not connected, or just no second display
+    if (screens.length < 2) return 'ok';
+    // If any two screens share the same width+height → mirror mode
+    for (let i = 0; i < screens.length; i++) {
+      for (let j = i + 1; j < screens.length; j++) {
+        if (screens[i].width === screens[j].width && screens[i].height === screens[j].height) {
+          return 'mirror';
+        }
+      }
+    }
+    return 'ok';
+  } catch {
+    // User denied window-management permission or browser error
+    return 'unavailable';
+  }
+}
+
 export default function Player() {
   const { keyToken: keyFromUrl } = useParams();
   const [step, setStep] = useState(STEPS.ENTER_KEY);
   const [keyToken, setKeyToken] = useState(keyFromUrl || '');
   const [filmInfo, setFilmInfo] = useState(null);
   const [sessionId, setSessionId] = useState(null);
-  const [localFile, setLocalFile] = useState(null);   // picked .jcfilm file
+  const [localFile, setLocalFile] = useState(null);
   const [decrypting, setDecrypting] = useState(false);
   const [blobUrl, setBlobUrl] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [displayWarning, setDisplayWarning] = useState(null); // null | 'mirror' | 'unavailable'
+  const [displayOverride, setDisplayOverride] = useState(false);
+  const [recheckLoading, setRecheckLoading] = useState(false);
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -33,7 +59,6 @@ export default function Player() {
     if (keyFromUrl) handleValidate(null, keyFromUrl);
   }, []);
 
-  // Clean up blob URL on unmount
   useEffect(() => {
     return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
   }, [blobUrl]);
@@ -55,8 +80,7 @@ export default function Player() {
     setLoading(false);
   };
 
-  const handleStartScreening = async () => {
-    if (!localFile) { setError('Please load the downloaded .jcfilm file first'); return; }
+  const doActivateAndPlay = async () => {
     setError(''); setLoading(true);
     try {
       const storedResumeToken = localStorage.getItem(`rt_${keyToken}`);
@@ -70,7 +94,6 @@ export default function Player() {
       if (res.data.resume_token) localStorage.setItem(`rt_${keyToken}`, res.data.resume_token);
       setSessionId(res.data.session_id);
 
-      // Decrypt locally using Web Crypto
       setDecrypting(true);
       const arrayBuffer = await localFile.arrayBuffer();
       const decrypted = await decryptJCFilm(arrayBuffer, res.data.decryption_key);
@@ -84,6 +107,40 @@ export default function Player() {
       setError(err.response?.data?.detail || err.message || 'Failed to start screening');
     }
     setLoading(false);
+  };
+
+  const handleStartScreening = async () => {
+    if (!localFile) { setError('Please load the downloaded .jcfilm file first'); return; }
+
+    // Skip display check if user already confirmed override
+    if (!displayOverride) {
+      const status = await checkDisplayMode();
+      if (status === 'mirror') {
+        setDisplayWarning('mirror');
+        return;
+      }
+      if (status === 'unavailable') {
+        setDisplayWarning('unavailable');
+        return;
+      }
+    }
+
+    setDisplayWarning(null);
+    await doActivateAndPlay();
+  };
+
+  const handleRecheck = async () => {
+    setRecheckLoading(true);
+    const status = await checkDisplayMode();
+    setRecheckLoading(false);
+    if (status === 'ok') {
+      setDisplayWarning(null);
+      await doActivateAndPlay();
+    } else if (status === 'mirror') {
+      setDisplayWarning('mirror'); // still mirroring
+    } else {
+      setDisplayWarning('unavailable');
+    }
   };
 
   const handleComplete = async (pct = 100) => {
@@ -136,8 +193,81 @@ export default function Player() {
           </div>
         )}
 
-        {/* STEP 2: Validated */}
-        {step === STEPS.VALIDATED && (
+        {/* STEP 2: Validated — Display Warning Overlay */}
+        {step === STEPS.VALIDATED && displayWarning === 'mirror' && (
+          <div style={styles.card}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🪞</div>
+            <h2 style={{ ...styles.title, color: '#ef4444' }}>Mirror Mode Detected</h2>
+            <p style={styles.subtitle}>
+              Your projector is mirroring your laptop screen. The film must play on the projector only — please switch to <strong style={{ color: '#f1f5f9' }}>Extended Display</strong> mode.
+            </p>
+
+            <div style={styles.osBox}>
+              <div style={styles.osTitle}>🪟 Windows</div>
+              <div style={styles.osStep}>Press <kbd style={styles.kbd}>Win</kbd> + <kbd style={styles.kbd}>P</kbd></div>
+              <div style={styles.osStep}>→ Select <strong style={{ color: '#f1f5f9' }}>Extend</strong></div>
+            </div>
+
+            <div style={{ ...styles.osBox, marginBottom: '1.5rem' }}>
+              <div style={styles.osTitle}>🍎 Mac</div>
+              <div style={styles.osStep}>Apple Menu → System Settings → Displays</div>
+              <div style={styles.osStep}>→ Uncheck <strong style={{ color: '#f1f5f9' }}>Mirror Displays</strong></div>
+            </div>
+
+            <button onClick={handleRecheck} disabled={recheckLoading} style={styles.primaryBtn}>
+              {recheckLoading ? 'Checking...' : '✓ I\'ve switched — Re-check'}
+            </button>
+            <button onClick={() => setDisplayWarning(null)} style={styles.ghostBtn}>
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {/* STEP 2: Validated — API Unavailable Warning */}
+        {step === STEPS.VALIDATED && displayWarning === 'unavailable' && (
+          <div style={styles.card}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>⚠️</div>
+            <h2 style={{ ...styles.title, fontSize: '1.3rem' }}>Confirm Display Mode</h2>
+            <p style={styles.subtitle}>
+              We couldn't automatically detect your display setup. Please confirm your projector is in <strong style={{ color: '#f1f5f9' }}>Extended Display</strong> mode before starting.
+            </p>
+
+            <div style={styles.osBox}>
+              <div style={styles.osTitle}>🪟 Windows</div>
+              <div style={styles.osStep}>Press <kbd style={styles.kbd}>Win</kbd> + <kbd style={styles.kbd}>P</kbd> → Select <strong style={{ color: '#f1f5f9' }}>Extend</strong></div>
+            </div>
+            <div style={{ ...styles.osBox, marginBottom: '1.5rem' }}>
+              <div style={styles.osTitle}>🍎 Mac</div>
+              <div style={styles.osStep}>Apple Menu → System Settings → Displays → Uncheck <strong style={{ color: '#f1f5f9' }}>Mirror Displays</strong></div>
+            </div>
+
+            <label style={styles.confirmRow}>
+              <input
+                type="checkbox"
+                checked={displayOverride}
+                onChange={e => setDisplayOverride(e.target.checked)}
+                style={{ marginRight: '0.6rem', accentColor: '#10b981', width: 16, height: 16 }}
+              />
+              <span style={{ color: '#e2e8f0', fontSize: '0.9rem' }}>
+                I confirm my projector is in <strong>Extended Display</strong> mode
+              </span>
+            </label>
+
+            <button
+              onClick={async () => { setDisplayWarning(null); await doActivateAndPlay(); }}
+              disabled={!displayOverride || loading || decrypting}
+              style={{ ...styles.primaryBtn, opacity: (!displayOverride || loading || decrypting) ? 0.5 : 1, marginTop: '1rem' }}
+            >
+              {decrypting ? '🔓 Decrypting...' : loading ? 'Starting...' : '▶ Continue to Screening'}
+            </button>
+            <button onClick={() => { setDisplayWarning(null); setDisplayOverride(false); }} style={styles.ghostBtn}>
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {/* STEP 2: Validated — Normal flow */}
+        {step === STEPS.VALIDATED && !displayWarning && (
           <div style={styles.card}>
             {filmInfo.poster_url && (
               <img src={filmInfo.poster_url} alt="poster" style={styles.poster}
@@ -157,11 +287,7 @@ export default function Player() {
             {/* Download section */}
             <div style={styles.downloadBox}>
               <p style={styles.downloadLabel}>Step 1 — Download the encrypted film file</p>
-              <a
-                href={filmInfo.download_url}
-                download
-                style={styles.downloadBtn}
-              >
+              <a href={filmInfo.download_url} download style={styles.downloadBtn}>
                 ⬇ Download Film (.jcfilm)
               </a>
               <p style={styles.downloadHint}>Save this file on your laptop before screening day</p>
@@ -191,7 +317,7 @@ export default function Player() {
             >
               {decrypting ? '🔓 Decrypting...' : loading ? 'Starting...' : '▶  Start Screening'}
             </button>
-            <button onClick={() => { setStep(STEPS.ENTER_KEY); setError(''); setLocalFile(null); }} style={styles.ghostBtn}>
+            <button onClick={() => { setStep(STEPS.ENTER_KEY); setError(''); setLocalFile(null); setDisplayWarning(null); setDisplayOverride(false); }} style={styles.ghostBtn}>
               ← Use Different Key
             </button>
           </div>
@@ -225,7 +351,7 @@ export default function Player() {
               "{filmInfo?.film_title}" has been marked as screened.<br />
               This key is now consumed and cannot be reused.
             </p>
-            <button onClick={() => { setStep(STEPS.ENTER_KEY); setKeyToken(''); setFilmInfo(null); setSessionId(null); setLocalFile(null); }} style={styles.primaryBtn}>
+            <button onClick={() => { setStep(STEPS.ENTER_KEY); setKeyToken(''); setFilmInfo(null); setSessionId(null); setLocalFile(null); setDisplayWarning(null); setDisplayOverride(false); }} style={styles.primaryBtn}>
               Start New Screening
             </button>
           </div>
@@ -265,4 +391,9 @@ const styles = {
   video: { width: '100%', background: '#000', display: 'block', maxHeight: '75vh' },
   stopBtn: { padding: '0.45rem 1.1rem', borderRadius: '6px', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 'bold' },
   watermark: { color: '#1e3a5f', fontSize: '0.7rem', textAlign: 'center', marginTop: '0.4rem' },
+  osBox: { background: '#0f172a', borderRadius: '8px', padding: '0.9rem 1rem', marginBottom: '0.65rem', textAlign: 'left' },
+  osTitle: { color: '#64748b', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' },
+  osStep: { color: '#94a3b8', fontSize: '0.87rem', lineHeight: '1.6' },
+  kbd: { display: 'inline-block', background: '#1e293b', border: '1px solid #475569', borderRadius: '4px', padding: '1px 6px', fontSize: '0.8rem', color: '#e2e8f0', fontFamily: 'monospace' },
+  confirmRow: { display: 'flex', alignItems: 'center', background: '#0f172a', borderRadius: '8px', padding: '0.85rem 1rem', cursor: 'pointer', textAlign: 'left' },
 };
